@@ -11,6 +11,17 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		61CD74EB5F3B450392646E94 /* FontAwesome.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6F1E28CBEE834056B39FFB74 /* FontAwesome.ttf */; };
+		646DFDB6CB23411B86471E12 /* Intrepid.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1C5A415950194B6EAD7E50B6 /* Intrepid.ttf */; };
+		B24B6E4B354148D1AE2ADFF4 /* Montserrat-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E67E7EFC34314DD29198D5D4 /* Montserrat-Bold.ttf */; };
+		53C9A33505BE4DB6A4F1A910 /* Montserrat-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CAF952316CD34A98A10C8C9B /* Montserrat-Regular.ttf */; };
+		CA0D7D1A94EA4B188076D15A /* Montserrat-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B17D433C31984A3BA6D3663C /* Montserrat-SemiBold.ttf */; };
+		198A7F2513B14B8380ED8754 /* Poppins-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4F768C0749524714BA9E6175 /* Poppins-Bold.ttf */; };
+		88B7B9D78F1B498E85334841 /* Poppins-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 007B94B55BEF4527BBB787B0 /* Poppins-Regular.ttf */; };
+		FD479A22DB86469DA5D8729A /* Poppins-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 88586DBDD83B423781ED91D5 /* Poppins-SemiBold.ttf */; };
+		F01DF9909EC94E78937F1138 /* Rubik-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 652395188A504296886D8FBA /* Rubik-Bold.ttf */; };
+		BCE496A2D71C46F4BB288FA5 /* Rubik-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5A5F638C83FD4ACDB12C2190 /* Rubik-Regular.ttf */; };
+		D33CDCDE1C5A42478AEEF824 /* Rubik-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9A35BF187F1F44ECAD2F45FE /* Rubik-SemiBold.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +35,17 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = HRMSNakshatra/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = HRMSNakshatra/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		6F1E28CBEE834056B39FFB74 /* FontAwesome.ttf */ = {isa = PBXFileReference; name = "FontAwesome.ttf"; path = "../src/assets/fonts/FontAwesome.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		1C5A415950194B6EAD7E50B6 /* Intrepid.ttf */ = {isa = PBXFileReference; name = "Intrepid.ttf"; path = "../src/assets/fonts/Intrepid.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		E67E7EFC34314DD29198D5D4 /* Montserrat-Bold.ttf */ = {isa = PBXFileReference; name = "Montserrat-Bold.ttf"; path = "../src/assets/fonts/Montserrat-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		CAF952316CD34A98A10C8C9B /* Montserrat-Regular.ttf */ = {isa = PBXFileReference; name = "Montserrat-Regular.ttf"; path = "../src/assets/fonts/Montserrat-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		B17D433C31984A3BA6D3663C /* Montserrat-SemiBold.ttf */ = {isa = PBXFileReference; name = "Montserrat-SemiBold.ttf"; path = "../src/assets/fonts/Montserrat-SemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		4F768C0749524714BA9E6175 /* Poppins-Bold.ttf */ = {isa = PBXFileReference; name = "Poppins-Bold.ttf"; path = "../src/assets/fonts/Poppins-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		007B94B55BEF4527BBB787B0 /* Poppins-Regular.ttf */ = {isa = PBXFileReference; name = "Poppins-Regular.ttf"; path = "../src/assets/fonts/Poppins-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		88586DBDD83B423781ED91D5 /* Poppins-SemiBold.ttf */ = {isa = PBXFileReference; name = "Poppins-SemiBold.ttf"; path = "../src/assets/fonts/Poppins-SemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		652395188A504296886D8FBA /* Rubik-Bold.ttf */ = {isa = PBXFileReference; name = "Rubik-Bold.ttf"; path = "../src/assets/fonts/Rubik-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		5A5F638C83FD4ACDB12C2190 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; name = "Rubik-Regular.ttf"; path = "../src/assets/fonts/Rubik-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		9A35BF187F1F44ECAD2F45FE /* Rubik-SemiBold.ttf */ = {isa = PBXFileReference; name = "Rubik-SemiBold.ttf"; path = "../src/assets/fonts/Rubik-SemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +96,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				E42B8B566425485B996EF920 /* Resources */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -96,6 +119,25 @@
 			);
 			path = Pods;
 			sourceTree = "<group>";
+		};
+		E42B8B566425485B996EF920 /* Resources */ = {
+			isa = "PBXGroup";
+			children = (
+				6F1E28CBEE834056B39FFB74 /* FontAwesome.ttf */,
+				1C5A415950194B6EAD7E50B6 /* Intrepid.ttf */,
+				E67E7EFC34314DD29198D5D4 /* Montserrat-Bold.ttf */,
+				CAF952316CD34A98A10C8C9B /* Montserrat-Regular.ttf */,
+				B17D433C31984A3BA6D3663C /* Montserrat-SemiBold.ttf */,
+				4F768C0749524714BA9E6175 /* Poppins-Bold.ttf */,
+				007B94B55BEF4527BBB787B0 /* Poppins-Regular.ttf */,
+				88586DBDD83B423781ED91D5 /* Poppins-SemiBold.ttf */,
+				652395188A504296886D8FBA /* Rubik-Bold.ttf */,
+				5A5F638C83FD4ACDB12C2190 /* Rubik-Regular.ttf */,
+				9A35BF187F1F44ECAD2F45FE /* Rubik-SemiBold.ttf */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+			path = "";
 		};
 /* End PBXGroup section */
 
@@ -159,6 +201,17 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				61CD74EB5F3B450392646E94 /* FontAwesome.ttf in Resources */,
+				646DFDB6CB23411B86471E12 /* Intrepid.ttf in Resources */,
+				B24B6E4B354148D1AE2ADFF4 /* Montserrat-Bold.ttf in Resources */,
+				53C9A33505BE4DB6A4F1A910 /* Montserrat-Regular.ttf in Resources */,
+				CA0D7D1A94EA4B188076D15A /* Montserrat-SemiBold.ttf in Resources */,
+				198A7F2513B14B8380ED8754 /* Poppins-Bold.ttf in Resources */,
+				88B7B9D78F1B498E85334841 /* Poppins-Regular.ttf in Resources */,
+				FD479A22DB86469DA5D8729A /* Poppins-SemiBold.ttf in Resources */,
+				F01DF9909EC94E78937F1138 /* Rubik-Bold.ttf in Resources */,
+				BCE496A2D71C46F4BB288FA5 /* Rubik-Regular.ttf in Resources */,
+				D33CDCDE1C5A42478AEEF824 /* Rubik-SemiBold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
