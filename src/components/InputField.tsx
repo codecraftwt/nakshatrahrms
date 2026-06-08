@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, TextInput, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -27,19 +27,25 @@ export const InputField: React.FC<InputFieldProps> = ({
   const [isPasswordVisible, setIsPasswordVisible] = useState(!secureTextEntry);
   const { colors } = useTheme();
   const styles = createStyles(colors);
+  const inputRef = React.useRef<TextInput>(null);
 
   const togglePassword = () => {
     setIsPasswordVisible(!isPasswordVisible);
   };
 
-  const ContainerElement = onPress ? TouchableOpacity : View;
+  const handleContainerPress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      inputRef.current?.focus();
+    }
+  };
 
   return (
     <View style={styles.container}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <ContainerElement 
-        activeOpacity={0.8}
-        onPress={onPress}
+      <Pressable 
+        onPress={handleContainerPress}
         style={[
           styles.inputContainer,
           isFocused && styles.inputFocused,
@@ -51,6 +57,7 @@ export const InputField: React.FC<InputFieldProps> = ({
         
         <View style={{ flex: 1 }} pointerEvents={onPress ? 'none' : 'auto'}>
           <TextInput
+            ref={inputRef}
             style={[styles.input, multiline ? { textAlignVertical: 'top' } : {}]}
             placeholder={placeholder}
             placeholderTextColor={colors.textSecondary}
@@ -75,7 +82,7 @@ export const InputField: React.FC<InputFieldProps> = ({
         ) : (
           rightIcon && <Icon name={rightIcon} size={20} color={colors.textSecondary} style={styles.rightIcon} />
         )}
-      </ContainerElement>
+      </Pressable>
     </View>
   );
 };
@@ -93,15 +100,21 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
-    backgroundColor: colors.bgSurface,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
+    height: 52,
+    backgroundColor: 'rgba(21, 88, 176, 0.03)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(21, 88, 176, 0.1)',
+    paddingHorizontal: 16,
   },
   inputFocused: {
+    backgroundColor: '#FFFFFF',
     borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   leftIcon: {
     marginRight: 8,

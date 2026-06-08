@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, Modal, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, Modal, Pressable, PermissionsAndroid, Platform } from 'react-native';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 import { AppText as Text } from '../components/AppText';
 
@@ -21,6 +21,29 @@ export const ProfileScreen = ({ navigation }: any) => {
 
   const handleCamera = async () => {
     setIsImagePickerVisible(false);
+    
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: "Camera Permission",
+            message: "Nakshatra HRMS needs access to your camera to take a profile picture.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert("Permission Denied", "Camera permission is required to take a picture.");
+          return;
+        }
+      } catch (err) {
+        console.warn(err);
+        return;
+      }
+    }
+
     const options: CameraOptions = {
       mediaType: 'photo',
       saveToPhotos: true,
@@ -30,10 +53,15 @@ export const ProfileScreen = ({ navigation }: any) => {
     
     try {
       const result = await launchCamera(options);
-      if (result.assets && result.assets.length > 0) {
+      if (result.didCancel) {
+        console.log('User cancelled camera picker');
+      } else if (result.errorCode) {
+        Alert.alert('Camera Error', result.errorMessage || 'Failed to open camera');
+      } else if (result.assets && result.assets.length > 0) {
         setProfileImage(result.assets[0].uri || null);
       }
     } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred while opening the camera.');
       console.log('Error launching camera:', error);
     }
   };
@@ -47,10 +75,15 @@ export const ProfileScreen = ({ navigation }: any) => {
     
     try {
       const result = await launchImageLibrary(options);
-      if (result.assets && result.assets.length > 0) {
+      if (result.didCancel) {
+        console.log('User cancelled gallery picker');
+      } else if (result.errorCode) {
+        Alert.alert('Gallery Error', result.errorMessage || 'Failed to open gallery');
+      } else if (result.assets && result.assets.length > 0) {
         setProfileImage(result.assets[0].uri || null);
       }
     } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred while opening the gallery.');
       console.log('Error launching gallery:', error);
     }
   };

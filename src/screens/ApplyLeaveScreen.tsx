@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -67,16 +68,15 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={60}
+        enableAutomaticScroll={true}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
 
 
           <View style={styles.card}>
@@ -134,7 +134,7 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
               value={reason}
               onChangeText={setReason}
               multiline
-              height={100}
+              height={120}
             />
 
             <PrimaryButton
@@ -153,8 +153,7 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
               />
             )}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };
@@ -251,11 +250,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 24,
     shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.08,
-    shadowRadius: 30,
-    elevation: 12,
+    shadowOpacity: 0.12,
+    shadowRadius: 32,
+    elevation: 16,
     borderWidth: 1,
-    borderColor: 'rgba(21, 88, 176, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   sectionHeading: {
     ...Typography.h2,
@@ -278,24 +277,24 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: colors.bgPage,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    backgroundColor: 'rgba(21, 88, 176, 0.06)',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(21, 88, 176, 0.0)',
   },
   typeOptionActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
   typeOptionText: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.primary,
     fontWeight: '600',
   },
   typeOptionTextActive: {
@@ -310,9 +309,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 56,
     borderRadius: 16,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
   },
 });

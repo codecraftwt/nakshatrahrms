@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,10 +8,66 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { launchCamera, CameraOptions } from 'react-native-image-picker';
 
 export const PunchInScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+  
+  const [selfieUri, setSelfieUri] = useState<string | null>(null);
+
+  const takeSelfie = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: "Camera Permission",
+            message: "App needs access to your camera to take a selfie for punch in.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert("Permission Denied", "Camera permission is required to take a selfie.");
+          return;
+        }
+      } catch (err) {
+        console.warn(err);
+        return;
+      }
+    }
+
+    const options: CameraOptions = {
+      mediaType: 'photo',
+      saveToPhotos: false,
+      cameraType: 'front',
+      quality: 0.8,
+    };
+    
+    try {
+      const result = await launchCamera(options);
+      if (result.didCancel) {
+        console.log('User cancelled camera picker');
+      } else if (result.errorCode) {
+        Alert.alert('Camera Error', result.errorMessage || 'Failed to open camera');
+      } else if (result.assets && result.assets.length > 0) {
+        setSelfieUri(result.assets[0].uri || null);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred while opening the camera.');
+      console.log('Error launching camera:', error);
+    }
+  };
+
+  const handleConfirmPunchIn = () => {
+    if (!selfieUri) {
+      takeSelfie();
+      return;
+    }
+    navigation.replace('LiveTrackingScreen');
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -27,18 +83,24 @@ export const PunchInScreen = ({ navigation }: any) => {
 
       <View style={styles.body}>
         <View style={styles.cameraContainer}>
-          <View style={styles.cameraBox}>
+          <TouchableOpacity style={styles.cameraBox} onPress={takeSelfie} activeOpacity={0.8}>
+            {selfieUri ? (
+              <Image source={{ uri: selfieUri }} style={styles.cameraImage} />
+            ) : (
+              <>
+                <View style={styles.iconCircleLarge}>
+                  <Icon name="face-recognition" size={40} color={colors.primary} />
+                </View>
+                <Text style={styles.cameraInstruction}>Tap to capture selfie</Text>
+                <Text style={styles.cameraPreviewText}>Required for punch in</Text>
+              </>
+            )}
+
             <View style={[styles.corner, styles.topLeft]} />
             <View style={[styles.corner, styles.topRight]} />
             <View style={[styles.corner, styles.bottomLeft]} />
             <View style={[styles.corner, styles.bottomRight]} />
-            
-            <View style={styles.iconCircleLarge}>
-              <Icon name="face-recognition" size={40} color={colors.primary} />
-            </View>
-            <Text style={styles.cameraInstruction}>Position face in frame</Text>
-            <Text style={styles.cameraPreviewText}>Camera preview will appear here</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.locationCard}>
@@ -71,7 +133,7 @@ export const PunchInScreen = ({ navigation }: any) => {
         <View style={styles.bottomSection}>
           <PrimaryButton 
             label="✓ Confirm punch in"
-            onPress={() => navigation.replace('LiveTrackingScreen')}
+            onPress={handleConfirmPunchIn}
             style={styles.confirmBtn}
           />
           <Text style={styles.helperText}>GPS + selfie will be captured</Text>
@@ -134,6 +196,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     shadowRadius: 16,
     elevation: 4,
     position: 'relative',
+  },
+  cameraImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   corner: {
     position: 'absolute',

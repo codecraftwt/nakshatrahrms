@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Screens
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -13,6 +14,7 @@ const Tab = createBottomTabNavigator();
 
 export const MainTabs = () => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -39,8 +41,8 @@ export const MainTabs = () => {
           backgroundColor: colors.tabBar,
           borderTopWidth: 0.5,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
+          height: 52 + (insets.bottom > 0 ? insets.bottom : 8),
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
