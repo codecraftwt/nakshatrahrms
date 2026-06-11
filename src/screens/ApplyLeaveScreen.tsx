@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Switch } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { useDispatch, useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchLeaveTypes, fetchLeaveBalances, applyLeave, resetApplySuccess } from '../redux/slice/leaveSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -13,13 +17,44 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { Typography } from '../theme/typography';
 
 export const ApplyLeaveScreen = ({ navigation }: any) => {
-  const [type, setType] = useState('Sick Leave');
-  const [startDate, setStartDate] = useState(new Date(2025, 5, 15));
-  const [endDate, setEndDate] = useState(new Date(2025, 5, 16));
+  const [type, setType] = useState<any>(null);
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
   const [reason, setReason] = useState('');
+  const [isHalfDay, setIsHalfDay] = useState(false);
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { typesData, balanceData, applyLoading, applySuccess, applyError } = useSelector((state: RootState) => state.leave);
+
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchLeaveTypes());
+      dispatch(fetchLeaveBalances());
+    }, [dispatch])
+  );
+
+  React.useEffect(() => {
+    if (!type && typesData?.leave_types?.length > 0) {
+      setType(typesData.leave_types[0]);
+    }
+  }, [typesData, type]);
+
+  React.useEffect(() => {
+    if (applySuccess) {
+      Alert.alert('Success', 'Leave request submitted successfully!');
+      dispatch(resetApplySuccess());
+      navigation.goBack();
+    }
+    if (applyError) {
+      Alert.alert('Error', applyError);
+      dispatch(resetApplySuccess());
+    }
+  }, [applySuccess, applyError]);
+
+  const selectedBalance = balanceData?.balances?.find((b: any) => b.id === type?.id);
 
   const insets = useSafeAreaInsets();
   const { colors, theme } = useTheme();
@@ -45,6 +80,25 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
     return date.toISOString().split('T')[0];
   };
 
+  const handleSubmit = () => {
+    if (!type || !reason) {
+      Alert.alert('Validation Error', 'Please select a leave type and provide a reason.');
+      return;
+    }
+    const payload: any = {
+      type: type.name,
+      from: formatDate(startDate),
+      to: formatDate(endDate),
+      reason,
+      half_day: isHalfDay,
+    };
+    if (isHalfDay) {
+      payload.from_session_id = 1;
+      payload.to_session_id = 1;
+    }
+    dispatch(applyLeave(payload));
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Premium Header Background Elements */}
@@ -63,8 +117,10 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
           <Icon name="information-variant" size={20} color={colors.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.infoTitle}>Sick Leave Balance</Text>
-          <Text style={styles.infoText}>You have 5 days remaining this year.</Text>
+          <Text style={styles.infoTitle}>{type?.name || 'Leave'} Balance</Text>
+          <Text style={styles.infoText}>
+            You have {selectedBalance?.virtual_remaining_leaves || 0} {selectedBalance?.request_unit === 'hour' ? 'hours' : 'days'} remaining.
+          </Text>
         </View>
       </View>
 
@@ -84,22 +140,22 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
 
             <Text style={styles.label}>Select Type</Text>
             <View style={styles.typeSelector}>
-              {['Sick Leave', 'Casual Leave', 'Earned Leave'].map((item) => {
-                const isActive = type === item;
+              {typesData?.leave_types?.map((item: any) => {
+                const isActive = type?.id === item.id;
                 return (
                   <TouchableOpacity
-                    key={item}
+                    key={item.id}
                     style={[styles.typeOption, isActive && styles.typeOptionActive]}
                     onPress={() => setType(item)}
                     activeOpacity={0.8}
                   >
                     <Icon
-                      name={item === 'Sick Leave' ? 'medical-bag' : item === 'Casual Leave' ? 'beach' : 'briefcase'}
+                      name={item.name.includes('Sick') ? 'medical-bag' : item.name.includes('Paid') ? 'currency-usd' : 'calendar-text-outline'}
                       size={16}
                       color={isActive ? '#FFFFFF' : colors.textSecondary}
                       style={{ marginRight: 6 }}
                     />
-                    <Text style={[styles.typeOptionText, isActive && styles.typeOptionTextActive]}>{item}</Text>
+                    <Text style={[styles.typeOptionText, isActive && styles.typeOptionTextActive]}>{item.name}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -128,6 +184,16 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
               </View>
             </View>
 
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}>Request Half Day</Text>
+              <Switch
+                value={isHalfDay}
+                onValueChange={setIsHalfDay}
+                trackColor={{ false: '#e0e0e0', true: colors.primary + '80' }}
+                thumbColor={isHalfDay ? colors.primary : '#f4f3f4'}
+              />
+            </View>
+
             <InputField
               label="Reason for leave"
               placeholder="Please briefly explain your reason..."
@@ -138,9 +204,10 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
             />
 
             <PrimaryButton
-              label="Submit Application"
-              onPress={() => navigation.goBack()}
+              label={applyLoading ? "Submitting..." : "Submit Application"}
+              onPress={handleSubmit}
               style={styles.submitBtn}
+              disabled={applyLoading}
             />
 
             {showPicker && (

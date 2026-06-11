@@ -8,10 +8,28 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { MetricTile } from '../components/MetricTile';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchRouteData } from '../redux/slice/trackingSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 export const RouteDetailScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+
+  const route = useRoute<any>();
+  const dateParam = route.params?.date;
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { routeData, routeLoading } = useSelector((state: RootState) => state.tracking);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (dateParam) {
+        dispatch(fetchRouteData(dateParam));
+      }
+    }, [dispatch, dateParam])
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -19,20 +37,20 @@ export const RouteDetailScreen = ({ navigation }: any) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Route · 2 Jun</Text>
-        <Text style={styles.headerDistance}>12.4 km</Text>
+        <Text style={styles.headerTitle}>Route · {routeData?.date || dateParam || ''}</Text>
+        <Text style={styles.headerDistance}>{routeData?.total_km !== undefined ? routeData.total_km.toFixed(1) : '0.0'} km</Text>
       </View>
 
       <View style={styles.body}>
         <View style={styles.mapBox}>
           <Icon name="map-marker-path" size={28} color={colors.textSecondary} />
           <Text style={styles.mapText}>Travel route polyline</Text>
-          <Text style={styles.mapSubtext}>Google Maps SDK here</Text>
+          <Text style={styles.mapSubtext}>{routeData?.route?.length > 0 ? `${routeData.route.length} tracking points loaded` : 'Google Maps SDK here'}</Text>
         </View>
 
         <View style={styles.metricRow}>
-          <MetricTile label="Total distance" value="12.4" unit="km" />
-          <MetricTile label="Duration" value="9h 9m" subtext="on field" />
+          <MetricTile label="Total distance" value={routeData?.total_km !== undefined ? routeData.total_km.toFixed(1) : '0.0'} unit="km" />
+          <MetricTile label="Total points" value={routeData?.total_points || 0} subtext="captured" />
         </View>
 
         <View style={styles.detailCard}>

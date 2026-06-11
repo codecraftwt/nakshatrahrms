@@ -6,13 +6,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { MetricTile } from '../components/MetricTile';
-import { mockLeaveBalance, mockLeaveRequests } from '../data/mockData';
 import { StatusBadge } from '../components/StatusBadge';
+import { useDispatch, useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchLeaveBalances, fetchLeaveRequests } from '../redux/slice/leaveSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 export const LeaveScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { balanceData, requestsData, balanceLoading } = useSelector((state: RootState) => state.leave);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      dispatch(fetchLeaveBalances());
+      dispatch(fetchLeaveRequests({}));
+    }, [dispatch])
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -27,28 +39,29 @@ export const LeaveScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.metricRow}>
-          <MetricTile label="Earned Leave" value={`${mockLeaveBalance.earned}`} unit="days" />
-          <MetricTile label="Sick Leave" value={`${mockLeaveBalance.sick}`} unit="days" />
-        </View>
-
-        <View style={styles.casualLeaveCard}>
-          <View style={styles.casualHeader}>
-            <View style={styles.casualHeaderLeft}>
-              <View style={styles.iconBox}>
-                <Icon name="beach" size={20} color={colors.primary} />
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalScroll}
+          contentContainerStyle={styles.horizontalScrollContent}
+        >
+          {balanceData?.balances?.map((balance: any, idx: number) => (
+            <View key={idx} style={styles.horizontalCard}>
+              <View style={styles.hCardValueRow}>
+                <Text style={styles.hCardValue}>{balance.virtual_remaining_leaves || 0}</Text>
+                <Text style={styles.hCardUnit}>{balance.request_unit === 'hour' ? 'hrs' : 'days'}</Text>
               </View>
-              <Text style={styles.casualLabel}>Casual Leave</Text>
+              <Text style={styles.hCardLabel} numberOfLines={2}>{balance.name}</Text>
             </View>
-            <Text style={styles.casualValue}>{mockLeaveBalance.casual.remaining} left</Text>
-          </View>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: '40%' }]} />
-          </View>
-          <Text style={styles.progressText}>4 out of 10 days used</Text>
-        </View>
+          ))}
+          {(!balanceData?.balances || balanceData.balances.length === 0) && (
+            <View style={{ paddingHorizontal: 20 }}>
+              <Text style={{ color: colors.textSecondary }}>No leave balances available.</Text>
+            </View>
+          )}
+        </ScrollView>
         
-        <View style={styles.sectionHeader}>
+        <View style={[styles.sectionHeader, { marginTop: 24 }]}>
           <Text style={styles.sectionTitle}>Recent Requests</Text>
           <TouchableOpacity onPress={() => navigation.navigate('AllLeavesScreen')}>
             <Text style={styles.viewAllText}>View All</Text>
@@ -56,28 +69,33 @@ export const LeaveScreen = ({ navigation }: any) => {
         </View>
 
         <View style={styles.listContainer}>
-          {mockLeaveRequests.map((item, idx) => (
+          {requestsData?.records?.slice(0, 3).map((item: any, idx: number) => {
+            const dateText = item.from === item.to ? item.from : `${item.from} to ${item.to}`;
+            return (
             <TouchableOpacity 
-              key={idx} 
+              key={item.id || idx} 
               style={styles.listCard}
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('LeaveDetailScreen')}
+              onPress={() => navigation.navigate('LeaveDetailScreen', { id: item.id })}
             >
               <View style={styles.listIconBox}>
                 <Icon 
-                  name={item.type.includes('Sick') ? 'medical-bag' : 'calendar-text-outline'} 
+                  name={item.leave_type?.name?.includes('Sick') ? 'medical-bag' : 'calendar-text-outline'} 
                   size={24} 
                   color={colors.primary} 
                 />
               </View>
               <View style={styles.listTextContainer}>
-                <Text style={styles.itemTitle}>{item.type}</Text>
-                <Text style={styles.itemDate}>{item.date}</Text>
-                <Text style={styles.itemSub}>{item.days} day{item.days > 1 ? 's' : ''} · {item.reason}</Text>
+                <Text style={styles.itemTitle}>{item.leave_type?.name}</Text>
+                <Text style={styles.itemDate}>{dateText}</Text>
+                <Text style={styles.itemSub}>{item.number_of_days} day{item.number_of_days > 1 ? 's' : ''} · {item.reason}</Text>
               </View>
               <StatusBadge status={item.status as any} />
             </TouchableOpacity>
-          ))}
+          )})}
+          {(!requestsData?.records || requestsData.records.length === 0) && (
+            <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 10 }}>No recent requests found.</Text>
+          )}
         </View>
         
         <View style={{ height: 20 }} />
@@ -118,82 +136,62 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     elevation: 5,
   },
   scrollContent: {
-    paddingHorizontal: 20,
     paddingTop: 16,
   },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
+  horizontalScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
   },
-  casualLeaveCard: {
+  horizontalScrollContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  horizontalCard: {
     backgroundColor: colors.bgSurface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(21, 88, 176, 0.05)',
-  },
-  casualHeader: {
-    flexDirection: 'row',
+    width: 140,
+    height: 110,
+    borderRadius: 20,
+    padding: 16,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(21, 88, 176, 0.08)',
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  casualHeaderLeft: {
+  hCardValueRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
   },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.bgPage,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  casualLabel: {
-    fontSize: 16,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  casualValue: {
-    fontSize: 14,
-    fontWeight: '600',
+  hCardValue: {
+    fontSize: 32,
+    fontWeight: '800',
     color: colors.primary,
   },
-  progressBarBg: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.bgPage,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  progressText: {
-    fontSize: 12,
+  hCardUnit: {
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textSecondary,
-    marginTop: 8,
-    textAlign: 'right',
+    marginLeft: 6,
+  },
+  hCardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    lineHeight: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   viewAllText: {
@@ -202,6 +200,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
   },
   listContainer: {
+    paddingHorizontal: 20,
     gap: 12,
   },
   listCard: {

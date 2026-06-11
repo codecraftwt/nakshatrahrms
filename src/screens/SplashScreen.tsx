@@ -6,17 +6,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useSelector } from 'react-redux';
+import { RootState } from '../redux/store';
 
 export const SplashScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+  const isLoggedIn = useSelector((state: RootState) => state.auth.isLoggedIn);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigation.replace('LoginScreen');
+      if (isLoggedIn) {
+        navigation.replace('MainTabs');
+      } else {
+        navigation.replace('LoginScreen');
+      }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, isLoggedIn]);
 
   return (
     <SafeAreaView style={styles.container}>

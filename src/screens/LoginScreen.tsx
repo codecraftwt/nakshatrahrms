@@ -8,16 +8,26 @@ import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { InputField } from '../components/InputField';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { useDispatch, useSelector } from 'react-redux';
+import { loginCandidate } from '../redux/slice/authSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 export const LoginScreen = ({ navigation }: any) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('mobile_api');
+  const [password, setPassword] = useState('123');
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
-  const handleLogin = () => {
-    navigation.replace('MainTabs');
+  const dispatch = useDispatch<AppDispatch>();
+  const { loading, error } = useSelector((state: RootState) => state.auth);
+
+  const handleLogin = async () => {
+    if (!email || !password) return;
+    const resultAction = await dispatch(loginCandidate({ email, password }));
+    if (loginCandidate.fulfilled.match(resultAction)) {
+      navigation.replace('MainTabs');
+    }
   };
 
   return (
@@ -75,9 +85,16 @@ export const LoginScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
 
+            {error ? (
+              <Text style={{ color: colors.error || 'red', marginBottom: 16, textAlign: 'center', fontSize: 14 }}>
+                {error}
+              </Text>
+            ) : null}
+
             <PrimaryButton 
-              label="Sign in" 
+              label={loading ? "Signing in..." : "Sign in"} 
               onPress={handleLogin}
+              disabled={loading || !email || !password}
               style={styles.signInButton}
             />
 

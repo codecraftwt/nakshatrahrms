@@ -7,12 +7,24 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
-import { mockLeaveRequests } from '../data/mockData';
 import { StatusBadge } from '../components/StatusBadge';
+import { useDispatch, useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchLeaveRequests } from '../redux/slice/leaveSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 export const AllLeavesScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { requestsData } = useSelector((state: RootState) => state.leave);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      dispatch(fetchLeaveRequests({}));
+    }, [dispatch])
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -25,28 +37,33 @@ export const AllLeavesScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.listContainer}>
-          {mockLeaveRequests.map((item, idx) => (
+          {requestsData?.records?.map((item: any, idx: number) => {
+            const dateText = item.from === item.to ? item.from : `${item.from} to ${item.to}`;
+            return (
             <TouchableOpacity 
-              key={idx} 
+              key={item.id || idx} 
               style={styles.listCard}
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('LeaveDetailScreen')}
+              onPress={() => navigation.navigate('LeaveDetailScreen', { id: item.id })}
             >
               <View style={styles.listIconBox}>
                 <Icon 
-                  name={item.type.includes('Sick') ? 'medical-bag' : 'calendar-text-outline'} 
+                  name={item.leave_type?.name?.includes('Sick') ? 'medical-bag' : 'calendar-text-outline'} 
                   size={24} 
                   color={colors.primary} 
                 />
               </View>
               <View style={styles.listTextContainer}>
-                <Text style={styles.itemTitle}>{item.type}</Text>
-                <Text style={styles.itemDate}>{item.date}</Text>
-                <Text style={styles.itemSub}>{item.days} day{item.days > 1 ? 's' : ''} · {item.reason}</Text>
+                <Text style={styles.itemTitle}>{item.leave_type?.name}</Text>
+                <Text style={styles.itemDate}>{dateText}</Text>
+                <Text style={styles.itemSub}>{item.number_of_days} day{item.number_of_days > 1 ? 's' : ''} · {item.reason}</Text>
               </View>
               <StatusBadge status={item.status as any} />
             </TouchableOpacity>
-          ))}
+          )})}
+          {(!requestsData?.records || requestsData.records.length === 0) && (
+            <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No leave requests found.</Text>
+          )}
         </View>
         <View style={{ height: 20 }} />
       </ScrollView>

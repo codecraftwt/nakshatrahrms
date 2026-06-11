@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchTodayAttendance, fetchAttendanceStatus, fetchAttendanceHistory, fetchAttendanceSummary } from '../redux/slice/attendanceSlice';
+import { syncAttendance } from '../redux/slice/payrollSlice';
+import { RootState, AppDispatch } from '../redux/store';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
@@ -14,9 +19,33 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const { colors, theme } = useTheme();
   const styles = createStyles(colors);
 
+  const dispatch = useDispatch<AppDispatch>();
+  const { todayData, statusData, historyData, summaryData, loading } = useSelector((state: RootState) => state.attendance);
+  const { syncLoading, syncSuccess, syncError } = useSelector((state: RootState) => state.payroll);
+
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchTodayAttendance());
+      dispatch(fetchAttendanceStatus());
+    }, [dispatch])
+  );
+
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(selectedDate.getFullYear());
+
+  React.useEffect(() => {
+    const year = selectedDate.getFullYear();
+    const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
+    dispatch(fetchAttendanceHistory(`${year}-${month}`));
+    dispatch(fetchAttendanceSummary(`${year}-${month}`));
+  }, [selectedDate, dispatch]);
+
+  React.useEffect(() => {
+    if (syncSuccess) {
+      // Optional: you can show a toast or alert here if needed
+    }
+  }, [syncSuccess]);
 
   const handleOpenPicker = () => {
     setPickerYear(selectedDate.getFullYear());
@@ -54,11 +83,23 @@ export const AttendanceScreen = ({ navigation }: any) => {
       let isToday = isCurrentMonth && d === today.getDate();
       let status = '';
       
-      // Simple mock logic: weekends empty, past days randomly present/absent
-      const dayOfWeek = new Date(year, month, d).getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        if (new Date(year, month, d) < today) {
-           status = (d % 7 === 0) ? 'absent' : 'present';
+      // Map actual API data if available
+      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+      const record = historyData?.records?.find((r: any) => r.date === dateStr);
+
+      if (record) {
+        if (record.status === 'absent' || record.status === 'leave') {
+            status = 'absent';
+        } else if (record.status === 'half_day' || record.status === 'present' || record.attendances?.length > 0) {
+            status = 'present';
+        }
+      } else {
+        // Fallback simple logic
+        const dayOfWeek = new Date(year, month, d).getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          if (new Date(year, month, d) < today) {
+             status = 'absent';
+          }
         }
       }
 
@@ -97,10 +138,45 @@ export const AttendanceScreen = ({ navigation }: any) => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Attendance</Text>
+        
+        <TouchableOpacity 
+          style={styles.headerSyncBtn}
+          onPress={() => dispatch(syncAttendance({}))}
+          disabled={syncLoading}
+          activeOpacity={0.7}
+        >
+          {syncLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Icon name="sync" size={22} color={colors.primary} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
+        {/* Today's Status Card */}
+        <View style={[styles.calendarCard, { marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 }]}>
+          <View>
+            <Text style={{ fontSize: 13, color: colors.textSecondary }}>Today's Status</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginTop: 4, textTransform: 'capitalize' }}>
+              {statusData?.state ? statusData.state.replace('_', ' ') : (todayData?.attendance_state ? todayData.attendance_state.replace('_', ' ') : 'Pending')}
+            </Text>
+            {statusData?.has_punched_in_today && (
+              <Text style={{ fontSize: 12, color: colors.success, marginTop: 2 }}>Punched In</Text>
+            )}
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 13, color: colors.textSecondary }}>Hours Worked</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, marginTop: 4 }}>
+              {todayData?.hours_today?.toFixed(2) || '0.00'} hrs
+            </Text>
+            {statusData?.has_punched_out_today && (
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Punched Out</Text>
+            )}
+          </View>
+        </View>
+
         {/* Month Navigator */}
         <View style={styles.monthNavContainer}>
           <TouchableOpacity 
@@ -124,6 +200,26 @@ export const AttendanceScreen = ({ navigation }: any) => {
           >
             <Icon name="chevron-right" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
+        </View>
+
+        {/* Monthly Summary */}
+        <View style={styles.summaryContainer}>
+          <View style={[styles.summaryTile, { backgroundColor: colors.successBg }]}>
+            <Text style={[styles.summaryValue, { color: colors.successText }]}>{summaryData?.summary?.present || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.successText }]}>Present</Text>
+          </View>
+          <View style={[styles.summaryTile, { backgroundColor: colors.warningBg }]}>
+            <Text style={[styles.summaryValue, { color: colors.warningText }]}>{summaryData?.summary?.half_day || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.warningText }]}>Half Day</Text>
+          </View>
+          <View style={[styles.summaryTile, { backgroundColor: colors.dangerBg }]}>
+            <Text style={[styles.summaryValue, { color: colors.dangerText }]}>{summaryData?.summary?.absent || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.dangerText }]}>Absent</Text>
+          </View>
+          <View style={[styles.summaryTile, { backgroundColor: colors.primaryBg }]}>
+            <Text style={[styles.summaryValue, { color: colors.primary }]}>{summaryData?.summary?.leave || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.primary }]}>Leave</Text>
+          </View>
         </View>
 
         {/* Premium Calendar Card */}
@@ -182,27 +278,42 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
         {/* Premium List Container */}
         <View style={styles.listContainer}>
-          {mockAttendance.map((item, idx) => (
-            <TouchableOpacity 
-              key={idx} 
-              style={styles.listCard}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('RouteDetailScreen')}
-            >
-              <View style={styles.listIconBox}>
-                <Icon 
-                  name={item.status === 'absent' ? 'close-circle-outline' : (item.status === 'present' ? 'check-circle-outline' : 'clock-outline')} 
-                  size={24} 
-                  color={item.status === 'absent' ? colors.danger : (item.status === 'present' ? colors.success : colors.warning)} 
-                />
-              </View>
-              <View style={styles.listTextContainer}>
-                <Text style={styles.itemDate}>{item.date}</Text>
-                <Text style={styles.itemTime}>{item.time}</Text>
-              </View>
-              <StatusBadge status={item.status as any} />
-            </TouchableOpacity>
-          ))}
+          {historyData?.records?.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0)
+            .reverse()
+            .slice(0, 5)
+            .map((item: any, idx: number) => {
+              const attendance = item.attendances?.[0];
+              const leave = item.leave_requests?.[0];
+              let badgeStatus = item.status === 'half_day' ? 'half-day' : (item.status === 'leave' ? 'leave' : 'present');
+              let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
+              let iconColor = item.status === 'leave' ? colors.warning : colors.success;
+
+              return (
+              <TouchableOpacity 
+                key={idx} 
+                style={styles.listCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
+              >
+                <View style={styles.listIconBox}>
+                  <Icon 
+                    name={iconName} 
+                    size={24} 
+                    color={iconColor} 
+                  />
+                </View>
+                <View style={styles.listTextContainer}>
+                  <Text style={styles.itemDate}>{item.date}</Text>
+                  {attendance?.check_in && <Text style={styles.itemTime}>In: {attendance.check_in.split(' ')[1]}</Text>}
+                  {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
+                </View>
+                <StatusBadge status={badgeStatus as any} />
+              </TouchableOpacity>
+              )
+          })}
+          {(!historyData?.records || historyData.records.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).length === 0) && (
+            <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No recent logs found.</Text>
+          )}
         </View>
 
         <View style={{ height: 20 }} />
@@ -217,6 +328,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgPage,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
@@ -226,6 +340,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  headerSyncBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(21, 88, 176, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -440,5 +562,26 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   monthCellTextSelected: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  summaryContainer: {
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginBottom: 16,
+  },
+  summaryTile: {
+    width: '23%',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

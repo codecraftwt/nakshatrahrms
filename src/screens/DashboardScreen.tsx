@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Animated } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,12 +10,47 @@ import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { MetricTile } from '../components/MetricTile';
 import { mockUser, mockDashboard } from '../data/mockData';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchDashboardSummary } from '../redux/slice/dashboardSlice';
+import { fetchCurrentShift, fetchAssignedShift } from '../redux/slice/shiftSlice';
+import { fetchPayrollShiftDetails } from '../redux/slice/payrollSlice';
+import { fetchLiveKm, fetchDailyKm, fetchKmSummary } from '../redux/slice/trackingSlice';
+import { RootState, AppDispatch } from '../redux/store';
 
 export const DashboardScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { data: dashboardData, loading } = useSelector((state: RootState) => state.dashboard);
+  const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
+  const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
+
+  const formatTime = (time: number | undefined) => {
+    if (time === undefined || time === null) return '';
+    const hours = Math.floor(time);
+    const minutes = Math.round((time - hours) * 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchDashboardSummary());
+      dispatch(fetchCurrentShift());
+      dispatch(fetchAssignedShift());
+      dispatch(fetchPayrollShiftDetails());
+      dispatch(fetchLiveKm());
+
+      // Fetch today's daily KM as a baseline
+      const today = new Date().toISOString().split('T')[0];
+      dispatch(fetchDailyKm(today));
+      
+      // Fetch KM Summary for the dashboard metric tiles
+      dispatch(fetchKmSummary('today,month'));
+    }, [dispatch])
+  );
 
   React.useEffect(() => {
     Animated.loop(
@@ -38,15 +74,15 @@ export const DashboardScreen = ({ navigation }: any) => {
       {/* Premium Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Good morning, {mockUser.name.split(' ')[0]}</Text>
-          <Text style={styles.subGreeting}>{mockUser.designation} · {mockUser.employeeId}</Text>
+          <Text style={styles.greeting}>Good morning, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}</Text>
+          <Text style={styles.subGreeting}>{dashboardData?.employee?.designation || 'Employee'} · {dashboardData?.employee?.employee_code || ''}</Text>
         </View>
         <TouchableOpacity 
           style={styles.avatar} 
           onPress={() => navigation.navigate('Profile')}
           activeOpacity={0.8}
         >
-          <Text style={styles.avatarText}>{mockUser.initials}</Text>
+          <Text style={styles.avatarText}>{dashboardData?.employee?.name ? dashboardData.employee.name.charAt(0) : 'U'}</Text>
           <View style={styles.onlineDot} />
         </TouchableOpacity>
       </View>
@@ -60,15 +96,21 @@ export const DashboardScreen = ({ navigation }: any) => {
           <View style={styles.decoCircle2} />
 
           <View style={styles.punchHeader}>
-            <Text style={styles.punchDate}>Today, {mockDashboard.todayDate}</Text>
+            <Text style={styles.punchDate}>Today, {dashboardData?.date || ''}</Text>
             <View style={styles.badgeContainer}>
               <Icon name="clock-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.badgeText}>Pending</Text>
+              <Text style={styles.badgeText}>{dashboardData?.attendance_state === 'checked_in' ? 'Working' : 'Pending'}</Text>
             </View>
           </View>
 
-          <Text style={styles.punchStatus}>Ready for work?</Text>
-          <Text style={styles.punchSubStatus}>You haven't punched in yet today.</Text>
+          <Text style={styles.punchStatus}>
+            {dashboardData?.attendance_state === 'checked_in' ? 'Currently Punched In' : 'Ready for work?'}
+          </Text>
+          <Text style={styles.punchSubStatus}>
+            {dashboardData?.attendance_state === 'checked_in' 
+              ? `You have worked ${dashboardData?.hours_today?.toFixed(1) || 0} hours today.` 
+              : "You haven't punched in yet today."}
+          </Text>
           
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity 
@@ -77,7 +119,9 @@ export const DashboardScreen = ({ navigation }: any) => {
               onPress={() => navigation.navigate('PunchInScreen')}
             >
               <Icon name="fingerprint" size={20} color={colors.punchBtnText} style={styles.punchBtnIcon} />
-              <Text style={styles.punchBtnText}>Punch in now</Text>
+              <Text style={styles.punchBtnText}>
+                {dashboardData?.can_punch_out ? 'Punch out now' : 'Punch in now'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -85,28 +129,56 @@ export const DashboardScreen = ({ navigation }: any) => {
         <Text style={styles.sectionTitle}>Overview</Text>
 
         <View style={styles.metricRow}>
-          <MetricTile label="KM Today" value={`${mockDashboard.kmToday.toFixed(1)}`} unit="km" />
-          <MetricTile label="KM Month" value={`${mockDashboard.kmMonth}`} unit="km" />
+          <MetricTile 
+            label="KM Today" 
+            value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
+            unit="km" 
+          />
+          <MetricTile 
+            label="KM Month" 
+            value={kmSummaryData?.month?.total_km !== undefined ? kmSummaryData.month.total_km.toFixed(1) : "0.0"} 
+            unit="km" 
+          />
         </View>
 
         <View style={styles.metricRow}>
-          <MetricTile label="Present" value={`${mockDashboard.presentDays}`} subtext="this month" />
-          <MetricTile label="Leave Balance" value={`${mockDashboard.leaveBalance}`} subtext="days left" />
+          <MetricTile label="Present" value="0" subtext="this month" />
+          <MetricTile label="Leave Balance" value="0" subtext="days left" />
         </View>
 
-        <Text style={styles.sectionTitle}>Current Shift</Text>
+        <Text style={styles.sectionTitle}>Shift Details</Text>
 
+        {/* Current Shift */}
         <View style={styles.shiftCard}>
           <View style={styles.shiftIconBox}>
             <Icon name="briefcase-clock-outline" size={24} color={colors.primary} />
           </View>
           <View style={styles.shiftLeft}>
-            <Text style={styles.shiftName}>{mockUser.shift.name}</Text>
-            <Text style={styles.shiftTime}>{mockUser.shift.time}</Text>
+            <Text style={styles.shiftName}>Current: {shiftData?.name || dashboardData?.shift?.name || dashboardData?.employee?.shift?.name || 'GEN'}</Text>
+            <Text style={styles.shiftTime}>
+              {shiftData?.sessions?.length > 0 
+                ? `${formatTime(shiftData.sessions[0].in_time)} - ${formatTime(shiftData.sessions[shiftData.sessions.length - 1].out_time)}`
+                : '09:30 - 18:00'}
+            </Text>
           </View>
           <View style={styles.activeBadge}>
             <View style={styles.activeDot} />
             <Text style={styles.activeBadgeText}>Active</Text>
+          </View>
+        </View>
+
+        {/* Assigned Shift */}
+        <View style={[styles.shiftCard, { marginTop: 12 }]}>
+          <View style={styles.shiftIconBox}>
+            <Icon name="calendar-clock-outline" size={24} color={colors.primary} />
+          </View>
+          <View style={styles.shiftLeft}>
+            <Text style={styles.shiftName}>Assigned: {assignedData?.name || dashboardData?.shift?.name || dashboardData?.employee?.shift?.name || 'GEN'}</Text>
+            <Text style={styles.shiftTime}>
+              {assignedData?.sessions?.length > 0 
+                ? `${formatTime(assignedData.sessions[0].in_time)} - ${formatTime(assignedData.sessions[assignedData.sessions.length - 1].out_time)}`
+                : '09:30 - 18:00'}
+            </Text>
           </View>
         </View>
         

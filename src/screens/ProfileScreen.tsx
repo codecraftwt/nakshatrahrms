@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, Modal, Pressable, PermissionsAndroid, Platform } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 import { AppText as Text } from '../components/AppText';
 
@@ -8,11 +9,39 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { mockUser } from '../data/mockData';
-
+import { useDispatch, useSelector } from 'react-redux';
+import { logoutCandidate } from '../redux/slice/authSlice';
+import { fetchEmployeeProfile } from '../redux/slice/profileSlice';
+import { fetchCurrentShift, fetchAssignedShift } from '../redux/slice/shiftSlice';
+import { AppDispatch, RootState } from '../redux/store';
 export const ProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, theme, toggleTheme } = useTheme();
   const styles = createStyles(colors);
+  
+  const dispatch = useDispatch<AppDispatch>();
+  const { data: profileData, loading } = useSelector((state: RootState) => state.profile);
+  const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
+
+  const formatTime = (time: number | undefined) => {
+    if (time === undefined || time === null) return '';
+    const hours = Math.floor(time);
+    const minutes = Math.round((time - hours) * 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchEmployeeProfile());
+      dispatch(fetchCurrentShift());
+      dispatch(fetchAssignedShift());
+    }, [dispatch])
+  );
+
+  const handleLogout = async () => {
+    await dispatch(logoutCandidate());
+    navigation.replace('LoginScreen');
+  };
 
   const isDarkMode = theme === 'dark';
   
@@ -107,10 +136,10 @@ export const ProfileScreen = ({ navigation }: any) => {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              {(profileImage || (profileData?.photo && typeof profileData.photo === 'string')) ? (
+                <Image source={{ uri: profileImage || `data:image/png;base64,${profileData.photo}` }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarText}>{mockUser.initials}</Text>
+                <Text style={styles.avatarText}>{profileData?.name ? profileData.name.charAt(0) : 'U'}</Text>
               )}
             </View>
             <TouchableOpacity style={styles.editAvatarBtn} onPress={() => setIsImagePickerVisible(true)}>
@@ -118,18 +147,19 @@ export const ProfileScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.name}>{mockUser.name}</Text>
-          <Text style={styles.designation}>{mockUser.designation}</Text>
+          <Text style={styles.name}>{profileData?.name || 'User'}</Text>
+          <Text style={styles.designation}>{profileData?.designation || 'Employee'}</Text>
           
           <View style={styles.idBadge}>
             <Icon name="identifier" size={14} color={colors.primary} style={{ marginRight: 4 }} />
-            <Text style={styles.empId}>{mockUser.employeeId}</Text>
+            <Text style={styles.empId}>{profileData?.employee_code || ''}</Text>
           </View>
         </View>
 
-        {/* Current Shift Card */}
+        {/* Shift Details Card */}
         <Text style={styles.sectionTitle}>Work Details</Text>
         <View style={styles.settingsCard}>
+          {/* Current Shift */}
           <View style={styles.shiftCardInner}>
             <View style={styles.shiftIconBox}>
               <Icon name="briefcase-clock-outline" size={24} color={colors.primary} />
@@ -137,11 +167,34 @@ export const ProfileScreen = ({ navigation }: any) => {
             <View style={styles.shiftInfo}>
               <Text style={styles.shiftLabel}>Current Shift</Text>
               <Text style={styles.shiftValue}>
-                {mockUser.shift.name.split(' ')[0]} · {mockUser.shift.time}
+                {shiftData?.name || profileData?.shift?.name?.split(' ')[0] || 'GEN'} · {
+                  shiftData?.sessions?.length > 0 
+                    ? `${formatTime(shiftData.sessions[0].in_time)} - ${formatTime(shiftData.sessions[shiftData.sessions.length - 1].out_time)}`
+                    : '09:30 - 18:00'
+                }
               </Text>
             </View>
           </View>
           
+          <View style={styles.divider} />
+
+          {/* Assigned Shift */}
+          <View style={styles.shiftCardInner}>
+            <View style={styles.shiftIconBox}>
+              <Icon name="calendar-clock-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.shiftInfo}>
+              <Text style={styles.shiftLabel}>Assigned Shift</Text>
+              <Text style={styles.shiftValue}>
+                {assignedData?.name || profileData?.shift?.name?.split(' ')[0] || 'GEN'} · {
+                  assignedData?.sessions?.length > 0 
+                    ? `${formatTime(assignedData.sessions[0].in_time)} - ${formatTime(assignedData.sessions[assignedData.sessions.length - 1].out_time)}`
+                    : '09:30 - 18:00'
+                }
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.divider} />
           
           <View style={styles.settingsRow}>
@@ -149,7 +202,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Icon name="domain" size={20} color={colors.textSecondary} />
             </View>
             <Text style={styles.rowLabel}>Department</Text>
-            <Text style={styles.rowValue}>{mockUser.department}</Text>
+            <Text style={styles.rowValue}>{profileData?.department?.name || 'N/A'}</Text>
           </View>
           
           <View style={styles.divider} />
@@ -159,7 +212,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Icon name="map-marker-outline" size={20} color={colors.textSecondary} />
             </View>
             <Text style={styles.rowLabel}>Base Office</Text>
-            <Text style={styles.rowValue}>{mockUser.baseOffice}</Text>
+            <Text style={styles.rowValue}>Main Office</Text>
           </View>
         </View>
 
@@ -169,7 +222,7 @@ export const ProfileScreen = ({ navigation }: any) => {
         <TouchableOpacity 
           style={styles.logoutBtn}
           activeOpacity={0.8}
-          onPress={() => navigation.replace('LoginScreen')}
+          onPress={handleLogout}
         >
           <Icon name="logout" size={20} color={colors.danger} style={{ marginRight: 8 }} />
           <Text style={styles.logoutLabel}>Sign Out</Text>
