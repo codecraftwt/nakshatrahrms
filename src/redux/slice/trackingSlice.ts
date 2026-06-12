@@ -14,6 +14,8 @@ interface TrackingState {
   kmSummaryData: any | null;
   kmSummaryLoading: boolean;
   kmSummaryError: string | null;
+  postLocationLoading: boolean;
+  postLocationError: string | null;
 }
 
 const initialState: TrackingState = {
@@ -29,6 +31,8 @@ const initialState: TrackingState = {
   kmSummaryData: null,
   kmSummaryLoading: false,
   kmSummaryError: null,
+  postLocationLoading: false,
+  postLocationError: null,
 };
 
 export const fetchLiveKm = createAsyncThunk(
@@ -79,6 +83,19 @@ export const fetchKmSummary = createAsyncThunk(
     } catch (error: any) {
       console.log('KM Summary Error:', error?.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch KM summary');
+    }
+  }
+);
+
+export const postTrackingLocation = createAsyncThunk(
+  'tracking/postTrackingLocation',
+  async (data: { latitude: number; longitude: number; datetime: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/tracking/location', data);
+      return response.data;
+    } catch (error: any) {
+      console.log('Post Tracking Location Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to post tracking location');
     }
   }
 );
@@ -147,6 +164,17 @@ const trackingSlice = createSlice({
       .addCase(fetchKmSummary.rejected, (state, action) => {
         state.kmSummaryLoading = false;
         state.kmSummaryError = action.payload as string;
+      })
+      .addCase(postTrackingLocation.pending, (state) => {
+        state.postLocationLoading = true;
+        state.postLocationError = null;
+      })
+      .addCase(postTrackingLocation.fulfilled, (state) => {
+        state.postLocationLoading = false;
+      })
+      .addCase(postTrackingLocation.rejected, (state, action) => {
+        state.postLocationLoading = false;
+        state.postLocationError = action.payload as string;
       });
   },
 });

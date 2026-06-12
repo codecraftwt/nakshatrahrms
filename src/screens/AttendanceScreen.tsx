@@ -62,6 +62,13 @@ export const AttendanceScreen = ({ navigation }: any) => {
     return `${months[date.getMonth()]} ${date.getFullYear()}`;
   };
 
+  const getSafeHours = (hours: number | undefined) => {
+    if (!hours) return 0;
+    // Backend bug: returning seconds instead of hours
+    if (hours > 24) return hours / 3600;
+    return hours;
+  };
+
   const renderCalendarGrid = () => {
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
@@ -169,7 +176,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={{ fontSize: 13, color: colors.textSecondary }}>Hours Worked</Text>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, marginTop: 4 }}>
-              {todayData?.hours_today?.toFixed(2) || '0.00'} hrs
+              {getSafeHours(todayData?.hours_today).toFixed(2)} hrs
             </Text>
             {statusData?.has_punched_out_today && (
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Punched Out</Text>

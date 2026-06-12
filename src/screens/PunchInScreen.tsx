@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
@@ -9,12 +9,27 @@ import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { launchCamera, CameraOptions } from 'react-native-image-picker';
+import { LocationService } from '../services/LocationService';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../redux/store';
+import { postPunchIn } from '../redux/slice/attendanceSlice';
+import Geolocation from 'react-native-geolocation-service';
+import { ActivityIndicator } from 'react-native';
 
 export const PunchInScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
+  const dispatch = useDispatch<AppDispatch>();
   
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
+  const [selfieBase64, setSelfieBase64] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const takeSelfie = async () => {
     if (Platform.OS === 'android') {
@@ -43,7 +58,10 @@ export const PunchInScreen = ({ navigation }: any) => {
       mediaType: 'photo',
       saveToPhotos: false,
       cameraType: 'front',
-      quality: 0.8,
+      quality: 0.5,
+      maxWidth: 500,
+      maxHeight: 500,
+      includeBase64: true,
     };
     
     try {
@@ -54,6 +72,7 @@ export const PunchInScreen = ({ navigation }: any) => {
         Alert.alert('Camera Error', result.errorMessage || 'Failed to open camera');
       } else if (result.assets && result.assets.length > 0) {
         setSelfieUri(result.assets[0].uri || null);
+        setSelfieBase64(result.assets[0].base64 || null);
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred while opening the camera.');
@@ -61,12 +80,50 @@ export const PunchInScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleConfirmPunchIn = () => {
-    if (!selfieUri) {
+  const handleConfirmPunchIn = async () => {
+    if (!selfieUri || !selfieBase64) {
       takeSelfie();
       return;
     }
-    navigation.replace('LiveTrackingScreen');
+    
+    setLoading(true);
+
+    const hasLocationPermission = await LocationService.requestPermissions();
+    if (!hasLocationPermission) {
+      Alert.alert('Permission Denied', 'Location permission is required to punch in.');
+      setLoading(false);
+      return;
+    }
+
+    Geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const payload = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            selfie: selfieBase64,
+            timestamp: new Date().toISOString(),
+          };
+          
+          await dispatch(postPunchIn(payload)).unwrap();
+          
+          // Start background tracking
+          await LocationService.startTracking();
+          
+          navigation.replace('LiveTrackingScreen');
+        } catch (err) {
+          Alert.alert('Error', 'Failed to punch in. Please try again.');
+          console.error('Punch in error:', err);
+        } finally {
+          setLoading(false);
+        }
+      },
+      (error) => {
+        Alert.alert('Error', 'Failed to get current location.');
+        setLoading(false);
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+    );
   };
 
   return (
@@ -125,17 +182,23 @@ export const PunchInScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.locationInfo}>
               <Text style={styles.locationTitle}>Current Time</Text>
-              <Text style={styles.locationSub}>09:03 AM</Text>
+              <Text style={styles.locationSub}>
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.bottomSection}>
-          <PrimaryButton 
-            label="✓ Confirm punch in"
-            onPress={handleConfirmPunchIn}
-            style={styles.confirmBtn}
-          />
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} style={styles.confirmBtn} />
+          ) : (
+            <PrimaryButton 
+              label="✓ Confirm punch in"
+              onPress={handleConfirmPunchIn}
+              style={styles.confirmBtn}
+            />
+          )}
           <Text style={styles.helperText}>GPS + selfie will be captured</Text>
         </View>
       </View>

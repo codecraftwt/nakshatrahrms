@@ -14,6 +14,10 @@ interface AttendanceState {
   summaryData: any | null;
   summaryLoading: boolean;
   summaryError: string | null;
+  punchInLoading: boolean;
+  punchInError: string | null;
+  punchOutLoading: boolean;
+  punchOutError: string | null;
 }
 
 const initialState: AttendanceState = {
@@ -29,6 +33,10 @@ const initialState: AttendanceState = {
   summaryData: null,
   summaryLoading: false,
   summaryError: null,
+  punchInLoading: false,
+  punchInError: null,
+  punchOutLoading: false,
+  punchOutError: null,
 };
 
 export const fetchTodayAttendance = createAsyncThunk(
@@ -79,6 +87,32 @@ export const fetchAttendanceSummary = createAsyncThunk(
     } catch (error: any) {
       console.log('Attendance Summary Error:', error?.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch attendance summary');
+    }
+  }
+);
+
+export const postPunchIn = createAsyncThunk(
+  'attendance/postPunchIn',
+  async (data: { lat: number; lng: number; selfie: string; timestamp: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/attendance/punch-in', data);
+      return response.data;
+    } catch (error: any) {
+      console.log('Punch In Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to punch in');
+    }
+  }
+);
+
+export const postPunchOut = createAsyncThunk(
+  'attendance/postPunchOut',
+  async (data: { lat: number; lng: number; selfie: string; timestamp: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/attendance/punch-out', data);
+      return response.data;
+    } catch (error: any) {
+      console.log('Punch Out Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to punch out');
     }
   }
 );
@@ -151,6 +185,30 @@ const attendanceSlice = createSlice({
       .addCase(fetchAttendanceSummary.rejected, (state, action) => {
         state.summaryLoading = false;
         state.summaryError = action.payload as string;
+      })
+      // Punch In
+      .addCase(postPunchIn.pending, (state) => {
+        state.punchInLoading = true;
+        state.punchInError = null;
+      })
+      .addCase(postPunchIn.fulfilled, (state) => {
+        state.punchInLoading = false;
+      })
+      .addCase(postPunchIn.rejected, (state, action) => {
+        state.punchInLoading = false;
+        state.punchInError = action.payload as string;
+      })
+      // Punch Out
+      .addCase(postPunchOut.pending, (state) => {
+        state.punchOutLoading = true;
+        state.punchOutError = null;
+      })
+      .addCase(postPunchOut.fulfilled, (state) => {
+        state.punchOutLoading = false;
+      })
+      .addCase(postPunchOut.rejected, (state, action) => {
+        state.punchOutLoading = false;
+        state.punchOutError = action.payload as string;
       });
   },
 });

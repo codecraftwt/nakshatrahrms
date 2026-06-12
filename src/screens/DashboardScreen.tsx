@@ -35,6 +35,13 @@ export const DashboardScreen = ({ navigation }: any) => {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
+  const getSafeHours = (hours: number | undefined) => {
+    if (!hours) return 0;
+    // Backend bug: returning seconds instead of hours
+    if (hours > 24) return hours / 3600;
+    return hours;
+  };
+
   useFocusEffect(
     useCallback(() => {
       dispatch(fetchDashboardSummary());
@@ -108,7 +115,7 @@ export const DashboardScreen = ({ navigation }: any) => {
           </Text>
           <Text style={styles.punchSubStatus}>
             {dashboardData?.attendance_state === 'checked_in' 
-              ? `You have worked ${dashboardData?.hours_today?.toFixed(1) || 0} hours today.` 
+              ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.` 
               : "You haven't punched in yet today."}
           </Text>
           
@@ -116,7 +123,13 @@ export const DashboardScreen = ({ navigation }: any) => {
             <TouchableOpacity 
               style={styles.punchBtn}
               activeOpacity={0.9}
-              onPress={() => navigation.navigate('PunchInScreen')}
+              onPress={() => {
+                if (dashboardData?.attendance_state === 'checked_in' || dashboardData?.can_punch_out) {
+                  navigation.navigate('LiveTrackingScreen');
+                } else {
+                  navigation.navigate('PunchInScreen');
+                }
+              }}
             >
               <Icon name="fingerprint" size={20} color={colors.punchBtnText} style={styles.punchBtnIcon} />
               <Text style={styles.punchBtnText}>
