@@ -17,6 +17,9 @@ import { AppDispatch } from '../redux/store';
 import { postPunchOut } from '../redux/slice/attendanceSlice';
 import Geolocation from 'react-native-geolocation-service';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { usePipMode } from '../hooks/usePipMode';
+
+import { PermissionsAndroid, Platform } from 'react-native';
 
 export const LiveTrackingScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -25,17 +28,49 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const [loading, setLoading] = React.useState(false);
   const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
 
+  const { isPipMode, setPipAllowed } = usePipMode();
+
   React.useEffect(() => {
-    Geolocation.getCurrentPosition(
-      (position) => {
-        setCurrentLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-      },
-      (error) => console.log('Map location error', error),
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
-    );
+    setPipAllowed(true);
+    return () => {
+      setPipAllowed(false);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        if (Platform.OS === 'android') {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            // Fallback so it doesn't spin forever
+            setCurrentLocation({ lat: 16.7908, lng: 74.2816 });
+            return;
+          }
+        }
+        
+        Geolocation.getCurrentPosition(
+          (position) => {
+            setCurrentLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            });
+          },
+          (error) => {
+            console.log('Map location error', error);
+            // Fallback so it doesn't spin forever if emulator has no GPS
+            setCurrentLocation({ lat: 16.7908, lng: 74.2816 });
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      } catch (err) {
+        setCurrentLocation({ lat: 16.7908, lng: 74.2816 });
+      }
+    };
+    
+    fetchLocation();
   }, []);
 
   const handlePunchOut = async () => {
@@ -88,21 +123,61 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           } catch (err) {
             Alert.alert('Error', 'Failed to punch out. Please try again.');
             console.error('Punch out error:', err);
-          } finally {
             setLoading(false);
           }
         },
         (error) => {
-          Alert.alert('Error', 'Failed to get current location.');
+          Alert.alert('Location Error', 'Failed to get current location: ' + error.message);
+          console.error('Map location error:', error);
           setLoading(false);
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred during punch out.');
       console.error(err);
       setLoading(false);
     }
   };
+
+  if (isPipMode) {
+    return (
+      <View style={{ flex: 1 }}>
+        {currentLocation ? (
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={{ width: '100%', height: '100%' }}
+            initialRegion={{
+              latitude: currentLocation.lat,
+              longitude: currentLocation.lng,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }}
+            pitchEnabled={false}
+            rotateEnabled={false}
+            scrollEnabled={false}
+            zoomEnabled={false}
+          >
+            <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
+          </MapView>
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bgPage }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        )}
+
+        {/* Modern PiP Overlays */}
+        <View style={{ position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success, marginRight: 6 }} />
+          <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold', letterSpacing: 1 }}>LIVE</Text>
+        </View>
+
+        <View style={{ position: 'absolute', bottom: 12, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600', letterSpacing: 0.5 }}>Tracking Route...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>

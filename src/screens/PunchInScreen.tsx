@@ -114,15 +114,15 @@ export const PunchInScreen = ({ navigation }: any) => {
         } catch (err) {
           Alert.alert('Error', 'Failed to punch in. Please try again.');
           console.error('Punch in error:', err);
-        } finally {
           setLoading(false);
         }
       },
       (error) => {
-        Alert.alert('Error', 'Failed to get current location.');
+        Alert.alert('Location Error', 'Failed to get current location: ' + error.message);
+        console.error('Map location error:', error);
         setLoading(false);
       },
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
   };
 
