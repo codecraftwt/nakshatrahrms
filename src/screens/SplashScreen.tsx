@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, StatusBar } from 'react-native';
 import { AppText as Text } from '../components/AppText';
+import { useIsFocused } from '@react-navigation/native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,9 +11,10 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../redux/store';
 
 export const SplashScreen = ({ navigation }: any) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const styles = createStyles(colors);
   const isLoggedIn = useSelector((state: RootState) => state.auth.isLoggedIn);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -26,7 +28,8 @@ export const SplashScreen = ({ navigation }: any) => {
   }, [navigation, isLoggedIn]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {isFocused && <StatusBar backgroundColor="transparent" translucent={true} barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />}
       {/* Modern Geometric Background Elements */}
       <View style={styles.shape1} />
       <View style={styles.shape2} />

@@ -28,7 +28,28 @@ export const loginCandidate = createAsyncThunk(
         login: credentials.email,
         password: credentials.password,
       });
-      return response?.data;
+      
+      const data = response?.data;
+      
+      if (data?.error) {
+        return rejectWithValue(data.error.data?.message || data.error.message || data.error || 'Invalid credentials');
+      }
+      
+      if (data?.success === false || data?.status === 'error' || data?.status === false) {
+        return rejectWithValue(data.message || data.error || 'Login failed');
+      }
+
+      if (data?.result && data.result.uid === false) {
+        return rejectWithValue('Invalid email or password');
+      }
+
+      const token = data?.session_id || data?.data?.token || data?.token || data?.access_token || data?.data?.access_token || data?.result?.session_id;
+      
+      if (!token) {
+        return rejectWithValue(data?.message || 'Invalid email or password');
+      }
+
+      return data;
     } catch (error: any) {
       console.log("Login Error:", error?.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || 'Login failed');

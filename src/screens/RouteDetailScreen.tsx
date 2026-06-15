@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,14 +47,30 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   
   const formatTimeStr = (dateTimeStr: string) => {
     if (!dateTimeStr) return '--:--';
-    const timePart = dateTimeStr.split(' ')[1];
-    if (!timePart) return dateTimeStr;
-    const [h, m] = timePart.split(':');
-    let hours = parseInt(h, 10);
+    
+    let isoStr = dateTimeStr;
+    if (dateTimeStr.includes(' ') && !dateTimeStr.includes('T')) {
+      isoStr = dateTimeStr.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(isoStr);
+    
+    if (isNaN(d.getTime())) {
+      const timePart = dateTimeStr.split(' ')[1];
+      if (!timePart) return dateTimeStr;
+      const [h, m] = timePart.split(':');
+      let hours = parseInt(h, 10);
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${hours}:${m} ${ampm}`;
+    }
+
+    let hours = d.getHours();
+    let minutes = d.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
-    return `${hours}:${m} ${ampm}`;
+    return `${hours}:${minutes} ${ampm}`;
   };
 
   const punchInTime = attendance?.check_in ? formatTimeStr(attendance.check_in) : 'Not Punched In';
@@ -118,10 +134,23 @@ export const RouteDetailScreen = ({ navigation }: any) => {
             <Text style={styles.detailLabel}>Punch out</Text>
             <Text style={styles.detailValue}>{punchOutTime}</Text>
           </View>
+          {/* Selfie section commented out until backend API includes the selfie image
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Selfie</Text>
-            <View style={styles.selfiePlaceholder} />
-          </View>
+            {(() => {
+              let selfieUri = attendance?.selfie || attendance?.image || attendance?.photo;
+              if (selfieUri && !selfieUri.startsWith('http') && !selfieUri.startsWith('data:')) {
+                selfieUri = `data:image/jpeg;base64,${selfieUri}`;
+              }
+              
+              if (selfieUri) {
+                return <Image source={{ uri: selfieUri }} style={styles.selfiePlaceholder} />;
+              }
+              
+              return <View style={styles.selfiePlaceholder} />;
+            })()}
+          </View> 
+          */}
         </View>
       </View>
     </SafeAreaView>

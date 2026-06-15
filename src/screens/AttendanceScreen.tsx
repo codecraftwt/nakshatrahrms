@@ -311,7 +311,20 @@ export const AttendanceScreen = ({ navigation }: any) => {
                 </View>
                 <View style={styles.listTextContainer}>
                   <Text style={styles.itemDate}>{item.date}</Text>
-                  {attendance?.check_in && <Text style={styles.itemTime}>In: {attendance.check_in.split(' ')[1]}</Text>}
+                  {attendance?.check_in && <Text style={styles.itemTime}>In: {(() => {
+                    let isoStr = attendance.check_in;
+                    if (isoStr.includes(' ') && !isoStr.includes('T')) {
+                      isoStr = isoStr.replace(' ', 'T') + 'Z';
+                    }
+                    const d = new Date(isoStr);
+                    if (isNaN(d.getTime())) return attendance.check_in.split(' ')[1];
+                    let hours = d.getHours();
+                    let minutes = d.getMinutes().toString().padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    return `${hours}:${minutes} ${ampm}`;
+                  })()}</Text>}
                   {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
                 </View>
                 <StatusBadge status={badgeStatus as any} />

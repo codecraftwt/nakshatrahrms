@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform, Alert, Switch } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Switch, StatusBar } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { fetchLeaveTypes, fetchLeaveBalances, applyLeave, resetApplySuccess } from '../redux/slice/leaveSlice';
 import { RootState, AppDispatch } from '../redux/store';
 
@@ -59,6 +59,7 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, theme } = useTheme();
   const styles = createStyles(colors);
+  const isFocused = useIsFocused();
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowPicker(Platform.OS === 'ios');
@@ -100,12 +101,13 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {isFocused && <StatusBar backgroundColor="transparent" translucent={true} barStyle="light-content" />}
       {/* Premium Header Background Elements */}
-      <View style={styles.headerBackground} />
-      <View style={styles.shape1} />
+      <View style={[styles.headerBackground, { height: 180 + insets.top }]} />
+      <View style={[styles.shape1, { top: -50 + insets.top }]} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: 16 + insets.top }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={26} color="#FFFFFF" />
         </TouchableOpacity>

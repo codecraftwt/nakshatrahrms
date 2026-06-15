@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, Modal, Pressable, PermissionsAndroid, Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, Modal, Pressable, PermissionsAndroid, Platform, StatusBar } from 'react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 import { AppText as Text } from '../components/AppText';
 
@@ -18,6 +18,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, theme, toggleTheme } = useTheme();
   const styles = createStyles(colors);
+  const isFocused = useIsFocused();
   
   const dispatch = useDispatch<AppDispatch>();
   const { data: profileData, loading } = useSelector((state: RootState) => state.profile);
@@ -118,14 +119,15 @@ export const ProfileScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
+      {isFocused && <StatusBar backgroundColor="transparent" translucent={true} barStyle="light-content" />}
       <View style={[styles.headerBackground, { height: 160 + insets.top }]} />
       <View style={[styles.shape1, { top: -50 + insets.top }]} />
       <View style={[styles.shape2, { top: 50 + insets.top }]} />
       <View style={[styles.shape3, { top: 120 + insets.top }]} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={[styles.headerTop, { paddingTop: 16, paddingBottom: 24 }]}>
+        <View style={[styles.headerTop, { paddingTop: 16 + insets.top, paddingBottom: 24 }]}>
           <Text style={styles.headerTitle}>My Profile</Text>
           <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('SettingsScreen')}>
             <Icon name="cog-outline" size={24} color="#FFFFFF" />
@@ -136,15 +138,25 @@ export const ProfileScreen = ({ navigation }: any) => {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              {(profileImage || (profileData?.photo && typeof profileData.photo === 'string')) ? (
-                <Image source={{ uri: profileImage || `data:image/png;base64,${profileData.photo}` }} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarText}>{profileData?.name ? profileData.name.charAt(0) : 'U'}</Text>
-              )}
+              {(() => {
+                let uri = null;
+                if (profileImage) {
+                  uri = profileImage;
+                } else if (profileData?.photo && typeof profileData.photo === 'string') {
+                  // The backend sends default avatars as base64-encoded SVGs.
+                  // React Native Image does not support SVGs natively.
+                  if (!profileData.photo.startsWith('PD94') && !profileData.photo.startsWith('PHN2')) {
+                    uri = `data:image/jpeg;base64,${profileData.photo}`;
+                  }
+                }
+                
+                if (uri) {
+                  return <Image source={{ uri }} style={styles.avatarImage} />;
+                }
+                return <Icon name="account" size={48} color={colors.primary} />;
+              })()}
             </View>
-            <TouchableOpacity style={styles.editAvatarBtn} onPress={() => setIsImagePickerVisible(true)}>
-              <Icon name="camera-outline" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
+            {/* Edit camera button removed */}
           </View>
           
           <Text style={styles.name}>{profileData?.name || 'User'}</Text>
@@ -270,7 +282,7 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
