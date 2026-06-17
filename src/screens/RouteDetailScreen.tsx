@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,16 +44,16 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   // Find attendance record for this date to get punch in/out times
   const record = historyData?.records?.find((r: any) => r.date === dateParam);
   const attendance = record?.attendances?.[0];
-  
+
   const formatTimeStr = (dateTimeStr: string) => {
     if (!dateTimeStr) return '--:--';
-    
+
     let isoStr = dateTimeStr;
     if (dateTimeStr.includes(' ') && !dateTimeStr.includes('T')) {
       isoStr = dateTimeStr.replace(' ', 'T') + 'Z';
     }
     const d = new Date(isoStr);
-    
+
     if (isNaN(d.getTime())) {
       const timePart = dateTimeStr.split(' ')[1];
       if (!timePart) return dateTimeStr;
@@ -86,7 +86,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
         <Text style={styles.headerDistance}>{routeData?.total_km !== undefined ? routeData.total_km.toFixed(1) : '0.0'} km</Text>
       </View>
 
-      <View style={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.mapBox}>
           {routePoints.length > 0 ? (
             <MapView
@@ -152,7 +152,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
           </View> 
           */}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -182,7 +182,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   body: {
     padding: 16,
-    flex: 1,
+    flexGrow: 1,
   },
   mapBox: {
     height: 520,

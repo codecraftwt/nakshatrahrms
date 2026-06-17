@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +27,7 @@ export const RegularisationScreen = ({ navigation }: any) => {
         <Text style={styles.headerTitle}>Regularisation request</Text>
       </View>
 
-      <View style={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <Text style={styles.helperText}>
           Request correction for a missed or wrong punch
         </Text>
@@ -70,7 +70,7 @@ export const RegularisationScreen = ({ navigation }: any) => {
           onPress={() => navigation.goBack()}
           style={styles.submitBtn}
         />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -96,7 +96,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   body: {
     padding: 16,
-    flex: 1,
+    flexGrow: 1,
   },
   helperText: {
     fontSize: 13,

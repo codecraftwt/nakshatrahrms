@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert, ScrollView } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -81,49 +81,86 @@ export const PunchInScreen = ({ navigation }: any) => {
   };
 
   const handleConfirmPunchIn = async () => {
-    if (!selfieUri || !selfieBase64) {
-      takeSelfie();
-      return;
-    }
-    
+    if (loading) return;
+
     setLoading(true);
 
-    const hasLocationPermission = await LocationService.requestPermissions();
-    if (!hasLocationPermission) {
-      Alert.alert('Permission Denied', 'Location permission is required to punch in.');
-      setLoading(false);
-      return;
-    }
-
-    Geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const payload = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            selfie: selfieBase64,
-            timestamp: new Date().toISOString(),
-          };
-          
-          await dispatch(postPunchIn(payload)).unwrap();
-          
-          // Start background tracking
-          await LocationService.startTracking();
-          
-          navigation.replace('LiveTrackingScreen');
-        } catch (err) {
-          Alert.alert('Error', 'Failed to punch in. Please try again.');
-          console.error('Punch in error:', err);
-          setLoading(false);
-        }
-      },
-      (error) => {
-        Alert.alert('Location Error', 'Failed to get current location: ' + error.message);
-        console.error('Map location error:', error);
+    try {
+      // ── Step 1: Request all permissions first ────────────────────────────────
+      const hasLocationPermission = await LocationService.requestPermissions();
+      if (!hasLocationPermission) {
+        Alert.alert('Permission Denied', 'Location permission is required to punch in.');
         setLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
+        return;
+      }
+
+      // ── Step 2: Take selfie ──────────────────────────────────────────────────
+      // Do this before starting the background service because launchCamera()
+      // briefly moves the app to the background on some devices.
+      let currentSelfieUri = selfieUri;
+      let currentSelfieBase64 = selfieBase64;
+
+      if (!currentSelfieUri || !currentSelfieBase64) {
+        await takeSelfie();
+        // takeSelfie sets state — re-check after camera closes
+        setLoading(false);
+        return;
+      }
+
+      // ── Step 3: Get GPS location ─────────────────────────────────────────────
+      const position = await new Promise<any>((resolve, reject) => {
+        Geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        });
+      });
+
+      // ── Step 4: Start background tracking BEFORE any await that could move  ──
+      //   the app to the background. On Android 12+, starting a foreground     ──
+      //   service is blocked if the app is not in the foreground               ──
+      //   (ForegroundServiceStartNotAllowedException is silently swallowed by  ──
+      //   react-native-background-actions, causing silent tracking failures).  ──
+      let trackingStarted = false;
+      try {
+        await LocationService.startTracking();
+        trackingStarted = true;
+      } catch (trackErr) {
+        console.warn('PunchIn: Failed to start tracking:', trackErr);
+        // Continue with punch-in anyway — worst case user has no live tracking
+      }
+
+      // ── Step 5: Send punch-in to server ──────────────────────────────────────
+      const payload = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        selfie: currentSelfieBase64,
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        await dispatch(postPunchIn(payload)).unwrap();
+      } catch (punchErr) {
+        // Punch-in failed — stop tracking since we didn't actually check in
+        if (trackingStarted) {
+          await LocationService.stopTracking().catch(() => {});
+        }
+        throw punchErr;
+      }
+
+      // ── Step 6: Navigate to live tracking screen ──────────────────────────────
+      setLoading(false);
+      navigation.replace('LiveTrackingScreen');
+
+    } catch (err: any) {
+      console.error('Punch in error:', err);
+      setLoading(false);
+      if (err?.code !== undefined) {
+        Alert.alert('Location Error', 'Failed to get current location. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to punch in. Please try again.');
+      }
+    }
   };
 
   return (
@@ -138,7 +175,7 @@ export const PunchInScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      <View style={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.cameraContainer}>
           <TouchableOpacity style={styles.cameraBox} onPress={takeSelfie} activeOpacity={0.8}>
             {selfieUri ? (
@@ -201,7 +238,7 @@ export const PunchInScreen = ({ navigation }: any) => {
           )}
           <Text style={styles.helperText}>GPS + selfie will be captured</Text>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -238,7 +275,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
   },
   body: {
-    flex: 1,
+    flexGrow: 1,
     padding: 20,
     justifyContent: 'space-between',
   },
