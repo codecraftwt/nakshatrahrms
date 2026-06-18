@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,8 +12,8 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { LocationService } from '../services/LocationService';
 import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import { Alert, ActivityIndicator } from 'react-native';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../redux/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../redux/store';
 import { postPunchOut } from '../redux/slice/attendanceSlice';
 import Geolocation from 'react-native-geolocation-service';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -25,8 +25,10 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
   const [loading, setLoading] = React.useState(false);
   const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
+  const [outRemarks, setOutRemarks] = React.useState('');
 
   const { isPipMode, setPipAllowed } = usePipMode();
 
@@ -112,6 +114,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
               lng: position.coords.longitude,
               selfie: base64Selfie,
               timestamp: new Date().toISOString(),
+              out_remarks: outRemarks,
             };
             
             await dispatch(postPunchOut(payload)).unwrap();
@@ -185,10 +188,14 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Live tracking</Text>
-        <View style={styles.recordingBadge}>
-          <Text style={styles.recordingText}>● Recording</Text>
-        </View>
+        <Text style={styles.headerTitle}>
+          {user?.track_live_location !== false ? 'Live tracking' : 'Punch Out'}
+        </Text>
+        {user?.track_live_location !== false && (
+          <View style={styles.recordingBadge}>
+            <Text style={styles.recordingText}>● Recording</Text>
+          </View>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
@@ -236,6 +243,18 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
               <Text style={styles.routeTitle}>Current location</Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Remarks (Optional)</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter punch out remarks"
+            placeholderTextColor={colors.textSecondary}
+            value={outRemarks}
+            onChangeText={setOutRemarks}
+            multiline
+          />
         </View>
 
         {loading ? (
@@ -375,6 +394,26 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  inputContainer: {
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    minHeight: 80,
+    color: colors.textPrimary,
+    textAlignVertical: 'top',
   },
   punchOutBtn: {
     marginTop: 'auto',

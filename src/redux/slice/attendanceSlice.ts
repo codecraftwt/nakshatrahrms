@@ -93,7 +93,7 @@ export const fetchAttendanceSummary = createAsyncThunk(
 
 export const postPunchIn = createAsyncThunk(
   'attendance/postPunchIn',
-  async (data: { lat: number; lng: number; selfie: string; timestamp: string }, { rejectWithValue }) => {
+  async (data: { lat: number; lng: number; selfie: string; timestamp: string; In_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-in', data);
       return response.data;
@@ -106,7 +106,7 @@ export const postPunchIn = createAsyncThunk(
 
 export const postPunchOut = createAsyncThunk(
   'attendance/postPunchOut',
-  async (data: { lat: number; lng: number; selfie: string; timestamp: string }, { rejectWithValue }) => {
+  async (data: { lat: number; lng: number; selfie: string; timestamp: string; out_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-out', data);
       return response.data;

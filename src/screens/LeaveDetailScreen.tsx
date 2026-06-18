@@ -12,7 +12,6 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchLeaveDetail, cancelLeave, resetCancelSuccess } from '../redux/slice/leaveSlice';
-import { syncLeave, resetSyncLeaveSuccess } from '../redux/slice/payrollSlice';
 import { RootState, AppDispatch } from '../redux/store';
 
 export const LeaveDetailScreen = ({ navigation }: any) => {
@@ -28,7 +27,6 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
 
   const dispatch = useDispatch<AppDispatch>();
   const { leaveDetailData, leaveDetailLoading, cancelLoading, cancelSuccess, cancelError } = useSelector((state: RootState) => state.leave);
-  const { syncLeaveLoading, syncLeaveSuccess, syncLeaveError } = useSelector((state: RootState) => state.payroll);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -50,16 +48,6 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
     }
   }, [cancelSuccess, cancelError]);
 
-  React.useEffect(() => {
-    if (syncLeaveSuccess) {
-      Alert.alert('Sync Successful', 'Leave data has been synced to payroll successfully.');
-      dispatch(resetSyncLeaveSuccess());
-    }
-    if (syncLeaveError) {
-      Alert.alert('Sync Error', syncLeaveError);
-      dispatch(resetSyncLeaveSuccess());
-    }
-  }, [syncLeaveSuccess, syncLeaveError]);
 
   const handleCancelSubmit = () => {
     if (!cancelReason.trim()) {
@@ -80,6 +68,10 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
   }
 
   const durationText = leave.from === leave.to ? leave.from : `${leave.from} to ${leave.to}`;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const leaveEndDate = leave.to || leave.from;
+  const isPastLeave = todayStr > leaveEndDate;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -163,21 +155,10 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
           onPress={() => setIsCancelModalVisible(true)}
           color={colors.danger}
           style={styles.cancelBtn}
+          disabled={isPastLeave}
         />
 
-        {/* Sync Payroll Button */}
-        <TouchableOpacity 
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(21, 88, 176, 0.08)', paddingVertical: 14, borderRadius: 16, marginTop: 12 }}
-          onPress={() => dispatch(syncLeave({ leave_id: leaveId }))}
-          disabled={syncLeaveLoading}
-          activeOpacity={0.7}
-        >
-          <Icon name="sync" size={18} color={colors.primary} style={{ marginRight: 6 }} />
-          <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>
-            {syncLeaveLoading ? 'Syncing...' : 'Sync Leave to Payroll'}
-          </Text>
-        </TouchableOpacity>
-        
+
         <View style={{ height: 40 }} />
       </ScrollView>
 

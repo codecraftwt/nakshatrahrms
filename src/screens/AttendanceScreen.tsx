@@ -22,6 +22,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const dispatch = useDispatch<AppDispatch>();
   const { todayData, statusData, historyData, summaryData, loading } = useSelector((state: RootState) => state.attendance);
   const { syncLoading, syncSuccess, syncError } = useSelector((state: RootState) => state.payroll);
+  const { user } = useSelector((state: RootState) => state.auth);
 
   useFocusEffect(
     useCallback(() => {
@@ -281,60 +282,64 @@ export const AttendanceScreen = ({ navigation }: any) => {
           </Pressable>
         </Modal>
 
-        <Text style={styles.sectionTitle}>Recent Logs</Text>
+        {user?.track_live_location !== false && (
+          <>
+            <Text style={styles.sectionTitle}>Recent Logs</Text>
 
-        {/* Premium List Container */}
-        <View style={styles.listContainer}>
-          {historyData?.records?.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0)
-            .reverse()
-            .slice(0, 5)
-            .map((item: any, idx: number) => {
-              const attendance = item.attendances?.[0];
-              const leave = item.leave_requests?.[0];
-              let badgeStatus = item.status === 'half_day' ? 'half-day' : (item.status === 'leave' ? 'leave' : 'present');
-              let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
-              let iconColor = item.status === 'leave' ? colors.warning : colors.success;
+            {/* Premium List Container */}
+            <View style={styles.listContainer}>
+              {historyData?.records?.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0)
+                .reverse()
+                .slice(0, 5)
+                .map((item: any, idx: number) => {
+                  const attendance = item.attendances?.[0];
+                  const leave = item.leave_requests?.[0];
+                  let badgeStatus = item.status === 'half_day' ? 'half-day' : (item.status === 'leave' ? 'leave' : 'present');
+                  let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
+                  let iconColor = item.status === 'leave' ? colors.warning : colors.success;
 
-              return (
-              <TouchableOpacity 
-                key={idx} 
-                style={styles.listCard}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
-              >
-                <View style={styles.listIconBox}>
-                  <Icon 
-                    name={iconName} 
-                    size={24} 
-                    color={iconColor} 
-                  />
-                </View>
-                <View style={styles.listTextContainer}>
-                  <Text style={styles.itemDate}>{item.date}</Text>
-                  {attendance?.check_in && <Text style={styles.itemTime}>In: {(() => {
-                    let isoStr = attendance.check_in;
-                    if (isoStr.includes(' ') && !isoStr.includes('T')) {
-                      isoStr = isoStr.replace(' ', 'T') + 'Z';
-                    }
-                    const d = new Date(isoStr);
-                    if (isNaN(d.getTime())) return attendance.check_in.split(' ')[1];
-                    let hours = d.getHours();
-                    let minutes = d.getMinutes().toString().padStart(2, '0');
-                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                    hours = hours % 12;
-                    hours = hours ? hours : 12;
-                    return `${hours}:${minutes} ${ampm}`;
-                  })()}</Text>}
-                  {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
-                </View>
-                <StatusBadge status={badgeStatus as any} />
-              </TouchableOpacity>
-              )
-          })}
-          {(!historyData?.records || historyData.records.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).length === 0) && (
-            <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No recent logs found.</Text>
-          )}
-        </View>
+                  return (
+                  <TouchableOpacity 
+                    key={idx} 
+                    style={styles.listCard}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
+                  >
+                    <View style={styles.listIconBox}>
+                      <Icon 
+                        name={iconName} 
+                        size={24} 
+                        color={iconColor} 
+                      />
+                    </View>
+                    <View style={styles.listTextContainer}>
+                      <Text style={styles.itemDate}>{item.date}</Text>
+                      {attendance?.check_in && <Text style={styles.itemTime}>In: {(() => {
+                        let isoStr = attendance.check_in;
+                        if (isoStr.includes(' ') && !isoStr.includes('T')) {
+                          isoStr = isoStr.replace(' ', 'T') + 'Z';
+                        }
+                        const d = new Date(isoStr);
+                        if (isNaN(d.getTime())) return attendance.check_in.split(' ')[1];
+                        let hours = d.getHours();
+                        let minutes = d.getMinutes().toString().padStart(2, '0');
+                        const ampm = hours >= 12 ? 'PM' : 'AM';
+                        hours = hours % 12;
+                        hours = hours ? hours : 12;
+                        return `${hours}:${minutes} ${ampm}`;
+                      })()}</Text>}
+                      {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
+                    </View>
+                    <StatusBadge status={badgeStatus as any} />
+                  </TouchableOpacity>
+                  )
+              })}
+              {(!historyData?.records || historyData.records.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).length === 0) && (
+                <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No recent logs found.</Text>
+              )}
+            </View>
+          </>
+        )}
 
         <View style={{ height: 20 }} />
       </ScrollView>

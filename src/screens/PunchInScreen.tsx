@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, Alert, ScrollView, TextInput } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,8 +10,8 @@ import { Typography } from '../theme/typography';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import { LocationService } from '../services/LocationService';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../redux/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../redux/store';
 import { postPunchIn } from '../redux/slice/attendanceSlice';
 import Geolocation from 'react-native-geolocation-service';
 import { ActivityIndicator } from 'react-native';
@@ -20,11 +20,13 @@ export const PunchInScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
   
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieBase64, setSelfieBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [inRemarks, setInRemarks] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -122,12 +124,14 @@ export const PunchInScreen = ({ navigation }: any) => {
       //   (ForegroundServiceStartNotAllowedException is silently swallowed by  ──
       //   react-native-background-actions, causing silent tracking failures).  ──
       let trackingStarted = false;
-      try {
-        await LocationService.startTracking();
-        trackingStarted = true;
-      } catch (trackErr) {
-        console.warn('PunchIn: Failed to start tracking:', trackErr);
-        // Continue with punch-in anyway — worst case user has no live tracking
+      if (user?.track_live_location !== false) {
+        try {
+          await LocationService.startTracking();
+          trackingStarted = true;
+        } catch (trackErr) {
+          console.warn('PunchIn: Failed to start tracking:', trackErr);
+          // Continue with punch-in anyway — worst case user has no live tracking
+        }
       }
 
       // ── Step 5: Send punch-in to server ──────────────────────────────────────
@@ -136,6 +140,7 @@ export const PunchInScreen = ({ navigation }: any) => {
         lng: position.coords.longitude,
         selfie: currentSelfieBase64,
         timestamp: new Date().toISOString(),
+        In_remarks: inRemarks,
       };
 
       try {
@@ -224,6 +229,18 @@ export const PunchInScreen = ({ navigation }: any) => {
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Remarks (Optional)</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter punch in remarks"
+            placeholderTextColor={colors.textSecondary}
+            value={inRemarks}
+            onChangeText={setInRemarks}
+            multiline
+          />
         </View>
 
         <View style={styles.bottomSection}>
@@ -412,6 +429,25 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.3,
     marginVertical: 12,
     marginLeft: 52,
+  },
+  inputContainer: {
+    marginTop: 24,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    minHeight: 80,
+    color: colors.textPrimary,
+    textAlignVertical: 'top',
   },
   bottomSection: {
     marginTop: 32,

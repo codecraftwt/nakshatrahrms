@@ -8,10 +8,11 @@ interface OutlineButtonProps {
   label: string;
   onPress: () => void;
   color?: string;
-  style?: ViewStyle;
+  style?: any;
+  disabled?: boolean;
 }
 
-export const OutlineButton: React.FC<OutlineButtonProps> = ({ label, onPress, color, style }) => {
+export const OutlineButton: React.FC<OutlineButtonProps> = ({ label, onPress, color, style, disabled }) => {
   const { colors } = useTheme();
   const outlineColor = color || colors.primary;
 
@@ -19,13 +20,15 @@ export const OutlineButton: React.FC<OutlineButtonProps> = ({ label, onPress, co
     <TouchableOpacity
       style={[
         styles.button,
-        { borderColor: outlineColor },
+        { borderColor: disabled ? colors.border : outlineColor },
+        disabled && { opacity: 0.5 },
         style
       ]}
       onPress={onPress}
       activeOpacity={0.8}
+      disabled={disabled}
     >
-      <Text style={[styles.label, { color: outlineColor }]}>{label}</Text>
+      <Text style={[styles.label, { color: disabled ? colors.textSecondary : outlineColor }]}>{label}</Text>
     </TouchableOpacity>
   );
 };

@@ -28,6 +28,7 @@ export const DashboardScreen = ({ navigation }: any) => {
   const { data: dashboardData, loading } = useSelector((state: RootState) => state.dashboard);
   const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
   const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const formatTime = (time: number | undefined) => {
     if (time === undefined || time === null) return '';
@@ -142,18 +143,20 @@ export const DashboardScreen = ({ navigation }: any) => {
 
         <Text style={styles.sectionTitle}>Overview</Text>
 
-        <View style={styles.metricRow}>
-          <MetricTile 
-            label="KM Today" 
-            value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
-            unit="km" 
-          />
-          <MetricTile 
-            label="KM Month" 
-            value={kmSummaryData?.month?.total_km !== undefined ? kmSummaryData.month.total_km.toFixed(1) : "0.0"} 
-            unit="km" 
-          />
-        </View>
+        {user?.track_live_location !== false && dashboardData?.employee?.track_live_location !== false && (
+          <View style={styles.metricRow}>
+            <MetricTile 
+              label="KM Today" 
+              value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
+              unit="km" 
+            />
+            <MetricTile 
+              label="KM Month" 
+              value={kmSummaryData?.month?.total_km !== undefined ? kmSummaryData.month.total_km.toFixed(1) : "0.0"} 
+              unit="km" 
+            />
+          </View>
+        )}
 
         <View style={styles.metricRow}>
           <MetricTile label="Present" value="0" subtext="this month" />

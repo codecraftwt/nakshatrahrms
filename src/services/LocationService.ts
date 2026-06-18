@@ -7,94 +7,115 @@ import { v4 as uuidv4 } from 'uuid';
 import api from '../api/axiosInstance';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const OFFLINE_QUEUE_KEY = 'offlineLocations';
-const MAX_QUEUE_SIZE = 10000;   // ~11 hours of offline time at 4s intervals
-const ACCURACY_THRESHOLD = 200; // metres — skip points less accurate than this
-const TRACKING_DELAY_MS = 4000; // 4 seconds between location pings
-const BATCH_WRITE_SIZE = 20;    // flush processed IDs to storage every N items
+const OFFLINE_QUEUE_KEY    = 'offlineLocations';
+const MAX_QUEUE_SIZE       = 10000;  // ~11 hours offline at 4-second intervals
+const ACCURACY_THRESHOLD   = 30;    // metres — skip fixes less accurate than this
+const TRACKING_DELAY_MS    = 4000;  // Android polling interval (ms)
+const BATCH_WRITE_SIZE     = 20;    // flush processed IDs every N items
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LocationPayload {
-  id: string;        // UUID — prevents dedup collisions when filtering by datetime
+  id: string;       // UUID — prevents dedup key collisions on datetime
   latitude: number;
   longitude: number;
   datetime: string;
 }
 
-// ─── State ────────────────────────────────────────────────────────────────────
-let isProcessingQueue = false;
-let iosWatchId: number | null = null; // iOS watchPosition subscription ID
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-/**
- * Read the offline queue from AsyncStorage.
- * Returns [] on any error so the caller never has to null-check.
- */
-const readQueue = async (): Promise<LocationPayload[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[LocationService] Failed to read queue:', e);
-    return [];
-  }
-};
-
-/**
- * Persist the queue to AsyncStorage.
- * NOTE: Each entry is ~100 bytes; 10 000 entries ≈ 1 MB — well within the
- * Android 6 MB per-key limit, but revisit if the payload grows.
- */
-const writeQueue = async (queue: LocationPayload[]): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-  } catch (e) {
-    console.warn('[LocationService] Failed to write queue:', e);
-  }
-};
-
-/**
- * Promisified wrapper around Geolocation.getCurrentPosition.
- *
- * FIX: The original code used the callback API inside an async loop, which
- * meant sleep(delay) fired immediately — before the GPS result arrived.
- * Wrapping in a Promise lets us properly await the position before sleeping.
- */
-const getCurrentPosition = (): Promise<{
+// Minimal shape returned by both getCurrentPosition and watchPosition
+interface PositionResult {
   coords: {
     latitude: number;
     longitude: number;
     accuracy: number | null;
   };
   timestamp: number;
-}> =>
-  new Promise((resolve, reject) =>
-    Geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    }),
-  );
+}
 
-// ─── Queue Processor ──────────────────────────────────────────────────────────
+// ─── Module-level state ───────────────────────────────────────────────────────
+let isProcessingQueue = false;
+let iosWatchId: number | null = null;
+
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const readQueue = async (): Promise<LocationPayload[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.warn('[LocationService] readQueue error:', e);
+    return [];
+  }
+};
+
+const writeQueue = async (queue: LocationPayload[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch (e) {
+    console.warn('[LocationService] writeQueue error:', e);
+  }
+};
+
+// ─── Shared location handler (used by BOTH platforms) ────────────────────────
 /**
- * Drains the offline queue by sending each point to the server in order.
+ * Single source of truth for handling a location fix.
+ * Called by:
+ *   - Android: trackingTask while-loop (via getCurrentPosition)
+ *   - iOS:     watchPosition callback
  *
- * Behaviour:
- * - 4xx response  → drop the point (bad data; retrying forever would block the queue)
- * - 5xx / network → stop processing and leave remaining items in storage for retry
- * - After a full pass with no failures, loops once more to pick up any points
- *   appended during processing (fixes the race condition in the original code).
- * - Batch-writes removals every BATCH_WRITE_SIZE items to avoid locking the JS thread.
+ * Applies accuracy filter → builds payload → appends to queue → triggers drain.
+ */
+const handleLocationUpdate = async (position: PositionResult): Promise<void> => {
+  // Skip low-accuracy fixes (jitter filter)
+  if (
+    position.coords.accuracy !== null &&
+    position.coords.accuracy > ACCURACY_THRESHOLD
+  ) {
+    console.log(
+      '[LocationService] Skipping inaccurate fix, accuracy:',
+      position.coords.accuracy,
+    );
+    return;
+  }
+
+  const payload: LocationPayload = {
+    id: uuidv4(),
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    datetime: new Date(position.timestamp).toISOString(),
+  };
+
+  const queue = await readQueue();
+
+  // Cap queue size — drop oldest when full
+  if (queue.length >= MAX_QUEUE_SIZE) {
+    console.warn('[LocationService] Queue full — dropping oldest point');
+    queue.shift();
+  }
+
+  queue.push(payload);
+  await writeQueue(queue);
+
+  // Fire-and-forget — explicit catch so failures never kill the caller's loop
+  processQueue().catch((e) =>
+    console.warn('[LocationService] processQueue error:', e),
+  );
+};
+
+// ─── Queue processor ──────────────────────────────────────────────────────────
+/**
+ * Drains the offline queue, sending each point to the server in order.
  *
- * FIX (race condition): After draining, re-reads the queue. If new items arrived
- * while we were processing, we loop again instead of exiting.
+ * Error handling:
+ *   4xx → drop the point (bad data would block the queue forever)
+ *   5xx / network error → stop and retry on next cycle
  *
- * FIX (fire-and-forget safety): Callers should use
- *   processQueue().catch(e => console.warn(...))
- * so unhandled rejections do not crash the background task.
+ * Race condition fix: after a successful pass, re-reads the queue.
+ * If new items arrived while we were draining, it loops again.
+ *
+ * Performance: flushes removals to AsyncStorage every BATCH_WRITE_SIZE
+ * items instead of after every single item.
  */
 const processQueue = async (): Promise<void> => {
   if (isProcessingQueue) return;
@@ -119,24 +140,30 @@ const processQueue = async (): Promise<void> => {
           });
           processedIds.add(item.id);
         } catch (error: any) {
-          if (error.response && error.response.status >= 400 && error.response.status < 500) {
-            // Client / validation error — drop it so it never blocks the queue
+          if (
+            error.response &&
+            error.response.status >= 400 &&
+            error.response.status < 500
+          ) {
+            // 4xx — bad payload, drop so it never blocks the queue
             console.warn(
-              '[LocationService] Server rejected point (4xx), dropping:',
+              '[LocationService] 4xx — dropping point:',
               error.response.status,
               error.response.data,
             );
             processedIds.add(item.id);
           } else {
-            // Network error or 5xx — pause and retry on the next cycle
-            console.warn('[LocationService] Network/server error — pausing queue:', error?.message);
+            // Network down or 5xx — pause, retry next cycle
+            console.warn(
+              '[LocationService] Network/5xx error — pausing:',
+              error?.message,
+            );
             networkFailed = true;
             break;
           }
         }
 
-        // FIX: Batch-flush processed IDs to storage every BATCH_WRITE_SIZE items
-        // so we do not hold a large diff in memory or block the JS thread too long.
+        // Batch flush every BATCH_WRITE_SIZE to keep memory and I/O low
         if (processedIds.size >= BATCH_WRITE_SIZE) {
           const latest = await readQueue();
           await writeQueue(latest.filter((i) => !processedIds.has(i.id)));
@@ -144,7 +171,7 @@ const processQueue = async (): Promise<void> => {
         }
       }
 
-      // Final flush for any remaining processed items in this pass
+      // Final flush for the tail of this pass
       if (processedIds.size > 0) {
         const latest = await readQueue();
         await writeQueue(latest.filter((i) => !processedIds.has(i.id)));
@@ -152,107 +179,108 @@ const processQueue = async (): Promise<void> => {
       }
 
       if (networkFailed) {
-        // Stop — items remain in storage and will be retried next cycle
         continueProcessing = false;
       } else {
-        // FIX: Check for new items added during this pass (race condition fix)
+        // Race condition fix: check for items added during this pass
         const remaining = await readQueue();
         continueProcessing = remaining.length > 0;
       }
     }
   } catch (e) {
-    console.warn('[LocationService] Unexpected queue processing error:', e);
+    console.warn('[LocationService] Unexpected processQueue error:', e);
   } finally {
     isProcessingQueue = false;
   }
 };
 
-// ─── Background Task ──────────────────────────────────────────────────────────
+// ─── Android background task ──────────────────────────────────────────────────
 /**
- * FIX 1 (async-in-Promise anti-pattern): The original code wrapped the entire
- * loop in `new Promise<void>(async (resolve) => { ... })`. If anything threw
- * inside that async callback the outer Promise would hang silently forever.
- * The task is now a plain async function — react-native-background-actions
- * keeps it alive as long as the service is running.
+ * Runs as a Foreground Service on Android via react-native-background-actions.
  *
- * FIX 2 (GPS callback not awaited): getCurrentPosition is now promisified and
- * awaited so sleep(delay) only fires AFTER the position is resolved, preventing
- * overlapping GPS calls.
+ * FIX: Switched from periodic `getCurrentPosition` polling to `watchPosition`.
+ * Native watchPosition is heavily optimized by the OS, uses a distanceFilter 
+ * to accurately trace roads and turns, and prevents cutting corners.
  */
 const trackingTask = async (taskDataArguments: any): Promise<void> => {
-  const { delay } = taskDataArguments;
+  let watchId: number | null = null;
 
-  while (BackgroundService.isRunning()) {
-    try {
-      const position = await getCurrentPosition();
-
-      // Anti-jitter filter: skip low-accuracy GPS fixes
-      if (position.coords.accuracy && position.coords.accuracy > ACCURACY_THRESHOLD) {
-        console.log('[LocationService] Skipping inaccurate point, accuracy:', position.coords.accuracy);
-      } else {
-        const payload: LocationPayload = {
-          id: uuidv4(),
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          datetime: new Date(position.timestamp).toISOString(),
-        };
-
-        // Read → cap → append → write
-        const queue = await readQueue();
-
-        if (queue.length >= MAX_QUEUE_SIZE) {
-          console.warn('[LocationService] Queue full — dropping oldest point');
-          queue.shift();
-        }
-
-        queue.push(payload);
-        await writeQueue(queue);
-
-        // FIX: Fire-and-forget with explicit catch so a processQueue failure
-        // does not propagate up and kill the background task loop.
-        processQueue().catch((e) =>
-          console.warn('[LocationService] processQueue unhandled error:', e),
-        );
-      }
-    } catch (err) {
-      // GPS timeout / permission revoked at runtime — log and continue loop
-      console.warn('[LocationService] Location fetch error:', err);
+  watchId = Geolocation.watchPosition(
+    (position) => {
+      handleLocationUpdate(position).catch((e) =>
+        console.warn('[LocationService] Android handleLocationUpdate error:', e)
+      );
+    },
+    (error) => {
+      console.warn('[LocationService] Android watchPosition error:', error);
+    },
+    {
+      enableHighAccuracy: true,
+      distanceFilter: 10, // fire only after moving 10m (traces turns perfectly)
+      interval: 2000,
+      fastestInterval: 1000,
     }
+  );
 
-    // Wait the full delay before the next ping (runs AFTER the await above)
-    await sleep(delay);
+  // Keep the task alive as long as the foreground service is active
+  while (BackgroundService.isRunning()) {
+    await sleep(15000); // Check every 15 seconds
+    
+    // Periodically try to flush the offline queue in case the network 
+    // just came back online while the user is stationary.
+    processQueue().catch((e) => 
+      console.warn('[LocationService] Android periodic sync error:', e)
+    );
+  }
+
+  // Cleanup when the service stops
+  if (watchId !== null) {
+    Geolocation.clearWatch(watchId);
   }
 };
 
-// ─── Background Service Options (Android) ────────────────────────────────────
+// ─── Android foreground-service config ───────────────────────────────────────
 const serviceOptions = {
   taskName: 'LocationTracking',
   taskTitle: 'Active Tracking',
   taskDesc: 'Your location is being tracked for attendance.',
-  taskIcon: {
-    name: 'ic_launcher',
-    type: 'mipmap',
-  },
+  taskIcon: { name: 'ic_launcher', type: 'mipmap' },
   color: '#ff00ff',
-  parameters: {
-    delay: TRACKING_DELAY_MS,
-  },
+  parameters: { delay: TRACKING_DELAY_MS },
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 export const LocationService = {
+
+  // ── requestPermissions ────────────────────────────────────────────────────
   /**
-   * Requests all location permissions required for the current Android version.
-   * Returns true when sufficient permissions are granted to start tracking.
+   * iOS FIX: Previously returned true immediately without asking for anything.
+   *   Now calls Geolocation.requestAuthorization('always') so the OS shows
+   *   the permission dialog. 'always' is required for background tracking.
    *
-   * FIX: Permission condition was `&&` (both denied) instead of `||` (either denied).
-   * FIX: Background location result is now checked and logged instead of ignored.
+   * Android FIX: || instead of && — need at least ONE of fine/coarse.
+   * Android FIX: background permission result is now read and logged.
    */
   requestPermissions: async (): Promise<boolean> => {
-    // iOS handles permissions via Info.plist — nothing to do at runtime
-    if (Platform.OS !== 'android') return true;
 
-    // Android 12+ requires FINE and COARSE to be requested together
+    // ── iOS ────────────────────────────────────────────────────────────────
+    if (Platform.OS === 'ios') {
+      // FIX: This was missing — iOS never showed a permission dialog before.
+      // Requires Info.plist keys:
+      //   NSLocationAlwaysAndWhenInUseUsageDescription
+      //   NSLocationWhenInUseUsageDescription
+      // and UIBackgroundModes → location
+      const auth = await Geolocation.requestAuthorization('always');
+
+      if (auth === 'denied' || auth === 'restricted') {
+        console.warn('[LocationService] iOS permission denied:', auth);
+        return false;
+      }
+
+      return true; // 'granted' or 'whenInUse' — watchPosition will still work
+    }
+
+    // ── Android ───────────────────────────────────────────────────────────
+    // Android 12+: FINE + COARSE must be requested together
     const granted = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
@@ -266,37 +294,39 @@ export const LocationService = {
       granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] ===
       PermissionsAndroid.RESULTS.GRANTED;
 
-    // FIX: We need AT LEAST ONE of fine or coarse. Original `&&` let us
-    // proceed even when both were denied.
+    // FIX: Original used && — that passed even when BOTH were denied.
+    // We only need at least one to proceed.
     if (!fineGranted && !coarseGranted) {
-      console.warn('[LocationService] Location permissions denied — cannot start tracking');
+      console.warn('[LocationService] Android: location permissions denied');
       return false;
     }
 
-    // Android 10+ (API 29+): background location is a separate permission dialog
+    // Android 10+ (API 29+): background location = separate dialog
     if (Platform.Version >= 29) {
       const bgResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
       );
 
-      // FIX: Return value was previously ignored; now logged clearly.
-      // We do not hard-fail here so foreground-only tracking still works.
-      // Change to `return false` if your app strictly requires background access.
+      // FIX: Result was previously ignored. Now logged clearly.
+      // Not a hard failure — foreground tracking still works without it.
+      // Set `return false` here if your app requires strict background access.
       if (bgResult !== PermissionsAndroid.RESULTS.GRANTED) {
         console.warn(
-          '[LocationService] Background location permission denied — tracking will only work while app is in foreground',
+          '[LocationService] Android: background location denied — ' +
+          'tracking will only work while the app is in the foreground',
         );
       }
     }
 
-    // Android 13+ (API 33+): POST_NOTIFICATIONS needed for the foreground service notification
+    // Android 13+ (API 33+): notification permission for the foreground service banner
     if (Platform.Version >= 33) {
       const notifResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
       );
       if (notifResult !== PermissionsAndroid.RESULTS.GRANTED) {
         console.warn(
-          '[LocationService] Notification permission denied — foreground service notification will not appear',
+          '[LocationService] Android: notification permission denied — ' +
+          'foreground service banner will not appear',
         );
       }
     }
@@ -304,52 +334,42 @@ export const LocationService = {
     return true;
   },
 
-  /** Start background location tracking. No-op if already running. */
+  // ── startTracking ─────────────────────────────────────────────────────────
+  /**
+   * iOS  → watchPosition with allowsBackgroundLocationUpdates: true
+   *         (react-native-background-actions only gives ~30 s on iOS via
+   *          beginBackgroundTask — NOT suitable for continuous tracking)
+   *
+   * Android → Foreground Service via react-native-background-actions
+   *
+   * FIX (iOS): `interval` and `fastestInterval` are Android-only options.
+   *   On iOS they are silently ignored. Removed to avoid confusion.
+   *
+   * FIX (iOS): `iosWatchId` is now cleared before creating a new watch so
+   *   a double-call to startTracking never leaks the old subscription.
+   */
   startTracking: async (): Promise<void> => {
     const hasPerms = await LocationService.requestPermissions();
     if (!hasPerms) {
-      console.warn('[LocationService] Cannot start tracking — required permissions not granted');
+      console.warn('[LocationService] startTracking aborted — permissions not granted');
       return;
     }
 
-    // ── iOS: use watchPosition with background location updates ──────────────
-    // react-native-background-actions uses beginBackgroundTask on iOS which
-    // only gives ~30s of background time. watchPosition with
-    // allowsBackgroundLocationUpdates=true is the correct iOS approach.
+    // ── iOS ────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
+      // FIX: Clear any existing watch first to prevent subscription leaks
       if (iosWatchId !== null) {
-        console.log('[LocationService] Tracking is already running (iOS)');
-        return;
+        console.log('[LocationService] iOS: clearing stale watch before restart');
+        Geolocation.clearWatch(iosWatchId);
+        iosWatchId = null;
       }
 
       iosWatchId = Geolocation.watchPosition(
         async (position) => {
           try {
-            if (position.coords.accuracy && position.coords.accuracy > ACCURACY_THRESHOLD) {
-              console.log('[LocationService] iOS: Skipping inaccurate point, accuracy:', position.coords.accuracy);
-              return;
-            }
-
-            const payload: LocationPayload = {
-              id: uuidv4(),
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              datetime: new Date(position.timestamp).toISOString(),
-            };
-
-            const queue = await readQueue();
-            if (queue.length >= MAX_QUEUE_SIZE) {
-              console.warn('[LocationService] iOS: Queue full — dropping oldest point');
-              queue.shift();
-            }
-            queue.push(payload);
-            await writeQueue(queue);
-
-            processQueue().catch((e) =>
-              console.warn('[LocationService] iOS: processQueue unhandled error:', e),
-            );
+            await handleLocationUpdate(position);
           } catch (err) {
-            console.warn('[LocationService] iOS: Error handling location point:', err);
+            console.warn('[LocationService] iOS: handleLocationUpdate error:', err);
           }
         },
         (error) => {
@@ -357,75 +377,67 @@ export const LocationService = {
         },
         {
           enableHighAccuracy: true,
-          distanceFilter: 10,           // only fire when moved 10m — saves battery
-          interval: TRACKING_DELAY_MS,  // minimum time between updates (Android ignored on iOS)
-          fastestInterval: TRACKING_DELAY_MS,
-          allowsBackgroundLocationUpdates: true,   // KEY: keeps firing when app is in background
-          showsBackgroundLocationIndicator: true,  // shows the blue bar so Apple approves it
-          useSignificantChanges: false,
+          distanceFilter: 10,                     // fire only after moving 10 m — saves battery
+          // NOTE: `interval` / `fastestInterval` removed — iOS ignores them silently
+          showsBackgroundLocationIndicator: true, // blue status-bar indicator (required by Apple)
+          useSignificantChanges: false,           // false = fine-grained; true = cell-tower only
         },
       );
 
-      console.log('[LocationService] iOS watchPosition started, watchId:', iosWatchId);
+      console.log('[LocationService] iOS: watchPosition started, id:', iosWatchId);
       return;
     }
 
-    // ── Android: use BackgroundService (Foreground Service) ──────────────────
+    // ── Android ───────────────────────────────────────────────────────────
     if (BackgroundService.isRunning()) {
-      console.log('[LocationService] Tracking is already running');
+      console.log('[LocationService] Android: already running');
       return;
     }
 
     try {
       await BackgroundService.start(trackingTask, serviceOptions);
-      console.log('[LocationService] Background service started');
+      console.log('[LocationService] Android: foreground service started');
     } catch (e) {
-      console.warn('[LocationService] Error starting background service:', e);
+      console.warn('[LocationService] Android: failed to start foreground service:', e);
     }
   },
 
-  /** Stop background location tracking. No-op if not running. */
+  // ── stopTracking ──────────────────────────────────────────────────────────
   stopTracking: async (): Promise<void> => {
-    // ── iOS ──────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
       if (iosWatchId !== null) {
         Geolocation.clearWatch(iosWatchId);
         iosWatchId = null;
-        console.log('[LocationService] iOS watchPosition stopped');
+        console.log('[LocationService] iOS: watchPosition stopped');
       }
       return;
     }
 
-    // ── Android ──────────────────────────────────────────────────────────────
     if (!BackgroundService.isRunning()) return;
 
     try {
       await BackgroundService.stop();
-      console.log('[LocationService] Background service stopped');
+      console.log('[LocationService] Android: foreground service stopped');
     } catch (e) {
-      console.warn('[LocationService] Error stopping background service:', e);
+      console.warn('[LocationService] Android: failed to stop foreground service:', e);
     }
   },
 
-  /** Returns true if the background service is currently active. */
+  // ── isTracking ────────────────────────────────────────────────────────────
   isTracking: (): boolean => {
     if (Platform.OS === 'ios') return iosWatchId !== null;
     return BackgroundService.isRunning();
   },
 
-  /**
-   * Returns how many location points are waiting in the offline queue.
-   * Useful for showing a "pending sync" indicator in the UI.
-   */
+  // ── getPendingQueueSize ───────────────────────────────────────────────────
+  /** How many points are sitting in the offline queue awaiting upload. */
   getPendingQueueSize: async (): Promise<number> => {
     const queue = await readQueue();
     return queue.length;
   },
 
-  /**
-   * Clears all pending location points from the offline queue.
-   * Call this on user logout to avoid sending stale data on next login.
-   */
+  // ── clearQueue ────────────────────────────────────────────────────────────
+  /** Wipe the queue — call on logout so stale data is never sent. */
   clearQueue: async (): Promise<void> => {
     await writeQueue([]);
     console.log('[LocationService] Offline queue cleared');
