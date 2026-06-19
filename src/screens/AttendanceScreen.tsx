@@ -213,12 +213,8 @@ export const AttendanceScreen = ({ navigation }: any) => {
         {/* Monthly Summary */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryTile, { backgroundColor: colors.successBg }]}>
-            <Text style={[styles.summaryValue, { color: colors.successText }]}>{summaryData?.summary?.present || 0}</Text>
+            <Text style={[styles.summaryValue, { color: colors.successText }]}>{(summaryData?.summary?.present || 0) + (summaryData?.summary?.half_day || 0)}</Text>
             <Text style={[styles.summaryLabel, { color: colors.successText }]}>Present</Text>
-          </View>
-          <View style={[styles.summaryTile, { backgroundColor: colors.warningBg }]}>
-            <Text style={[styles.summaryValue, { color: colors.warningText }]}>{summaryData?.summary?.half_day || 0}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.warningText }]}>Half Day</Text>
           </View>
           <View style={[styles.summaryTile, { backgroundColor: colors.dangerBg }]}>
             <Text style={[styles.summaryValue, { color: colors.dangerText }]}>{summaryData?.summary?.absent || 0}</Text>
@@ -284,7 +280,12 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
         {user?.track_live_location !== false && (
           <>
-            <Text style={styles.sectionTitle}>Recent Logs</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Recent Logs</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('AllLogsScreen')}>
+                <Text style={styles.seeAllText}>See all</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Premium List Container */}
             <View style={styles.listContainer}>
@@ -294,7 +295,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
                 .map((item: any, idx: number) => {
                   const attendance = item.attendances?.[0];
                   const leave = item.leave_requests?.[0];
-                  let badgeStatus = item.status === 'half_day' ? 'half-day' : (item.status === 'leave' ? 'leave' : 'present');
+                  let badgeStatus = item.status === 'leave' ? 'leave' : 'present';
                   let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
                   let iconColor = item.status === 'leave' ? colors.warning : colors.success;
 
@@ -487,7 +488,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   listContainer: {
     gap: 12, // Spaces out the cards beautifully
@@ -594,7 +605,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 16,
   },
   summaryTile: {
-    width: '23%',
+    width: '31%',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

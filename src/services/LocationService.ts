@@ -9,9 +9,9 @@ import api from '../api/axiosInstance';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const OFFLINE_QUEUE_KEY    = 'offlineLocations';
 const MAX_QUEUE_SIZE       = 10000;  // ~11 hours offline at 4-second intervals
-const ACCURACY_THRESHOLD   = 30;    // metres — skip fixes less accurate than this
-const TRACKING_DELAY_MS    = 4000;  // Android polling interval (ms)
-const BATCH_WRITE_SIZE     = 20;    // flush processed IDs every N items
+const ACCURACY_THRESHOLD   = 50;     // metres — skip fixes less accurate than this
+const TRACKING_DELAY_MS    = 4000;   // Android polling interval (ms)
+const BATCH_WRITE_SIZE     = 20;     // flush processed IDs every N items
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LocationPayload {
@@ -202,39 +202,40 @@ const processQueue = async (): Promise<void> => {
  * to accurately trace roads and turns, and prevents cutting corners.
  */
 const trackingTask = async (taskDataArguments: any): Promise<void> => {
-  let watchId: number | null = null;
+  const { delay } = taskDataArguments;
 
-  watchId = Geolocation.watchPosition(
-    (position) => {
-      handleLocationUpdate(position).catch((e) =>
-        console.warn('[LocationService] Android handleLocationUpdate error:', e)
-      );
-    },
-    (error) => {
-      console.warn('[LocationService] Android watchPosition error:', error);
-    },
-    {
-      enableHighAccuracy: true,
-      distanceFilter: 10, // fire only after moving 10m (traces turns perfectly)
-      interval: 2000,
-      fastestInterval: 1000,
-    }
-  );
-
-  // Keep the task alive as long as the foreground service is active
+  // Poll the latest accurate position periodically to satisfy backend tracking API
+  // Using getCurrentPosition in the loop forces a fresh GPS fix and prevents the OS
+  // from suspending passive watchPosition listeners during deep background/doze.
   while (BackgroundService.isRunning()) {
-    await sleep(15000); // Check every 15 seconds
-    
-    // Periodically try to flush the offline queue in case the network 
-    // just came back online while the user is stationary.
-    processQueue().catch((e) => 
-      console.warn('[LocationService] Android periodic sync error:', e)
-    );
-  }
+    try {
+      await new Promise<void>((resolve) => {
+        Geolocation.getCurrentPosition(
+          async (position) => {
+            if (position.coords.accuracy !== null && position.coords.accuracy <= ACCURACY_THRESHOLD) {
+              await handleLocationUpdate(position).catch((e) =>
+                console.warn('[LocationService] Android handleLocationUpdate error:', e)
+              );
+            }
+            resolve();
+          },
+          (error) => {
+            console.warn('[LocationService] Android getCurrentPosition error:', error);
+            resolve();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 2000,
+            distanceFilter: 0,
+          }
+        );
+      });
+    } catch (e) {
+      console.warn('[LocationService] Loop error:', e);
+    }
 
-  // Cleanup when the service stops
-  if (watchId !== null) {
-    Geolocation.clearWatch(watchId);
+    await sleep(delay); // Wait before next poll
   }
 };
 
@@ -246,10 +247,61 @@ const serviceOptions = {
   taskIcon: { name: 'ic_launcher', type: 'mipmap' },
   color: '#ff00ff',
   parameters: { delay: TRACKING_DELAY_MS },
+  foregroundServiceType: ['location'],
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 export const LocationService = {
+
+  // ── getAccurateLocation ───────────────────────────────────────────────────
+  /**
+   * Attempts to get a high-accuracy GPS fix (<= 50 meters).
+   * It listens to the GPS sensor for up to 10 seconds. Returns the best fix 
+   * found when time runs out, or resolves early if an excellent lock is achieved.
+   */
+  getAccurateLocation: (): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      let bestPosition: any = null;
+      let watchId: number;
+      let timeoutId: any;
+
+      const finish = (pos: any) => {
+        Geolocation.clearWatch(watchId);
+        clearTimeout(timeoutId);
+        resolve(pos);
+      };
+
+      watchId = Geolocation.watchPosition(
+        (position) => {
+          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+            bestPosition = position;
+          }
+          // If we get an accuracy of 20m or better, that's an excellent lock!
+          if (position.coords.accuracy <= 20) {
+            finish(position);
+          }
+        },
+        (error) => {
+          console.warn('[LocationService] getAccurateLocation error:', error);
+        },
+        { enableHighAccuracy: true, distanceFilter: 0, interval: 1000, fastestInterval: 500 }
+      );
+
+      timeoutId = setTimeout(() => {
+        Geolocation.clearWatch(watchId);
+        if (bestPosition) {
+          resolve(bestPosition);
+        } else {
+          // Fallback: If high-accuracy GPS totally fails indoors, try low-accuracy network location
+          Geolocation.getCurrentPosition(
+            (pos) => resolve(pos),
+            (err) => reject(new Error('Location timeout: Unable to get a GPS fix.')),
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+          );
+        }
+      }, 15000); // 15 seconds max wait for a highly accurate fix
+    });
+  },
 
   // ── requestPermissions ────────────────────────────────────────────────────
   /**
@@ -377,8 +429,7 @@ export const LocationService = {
         },
         {
           enableHighAccuracy: true,
-          distanceFilter: 10,                     // fire only after moving 10 m — saves battery
-          // NOTE: `interval` / `fastestInterval` removed — iOS ignores them silently
+          distanceFilter: 0,
           showsBackgroundLocationIndicator: true, // blue status-bar indicator (required by Apple)
           useSignificantChanges: false,           // false = fine-grained; true = cell-tower only
         },

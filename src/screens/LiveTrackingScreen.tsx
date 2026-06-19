@@ -11,13 +11,14 @@ import { MetricTile } from '../components/MetricTile';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { LocationService } from '../services/LocationService';
 import { launchCamera, CameraOptions } from 'react-native-image-picker';
-import { Alert, ActivityIndicator } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { postPunchOut } from '../redux/slice/attendanceSlice';
 import Geolocation from 'react-native-geolocation-service';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { usePipMode } from '../hooks/usePipMode';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { PermissionsAndroid, Platform } from 'react-native';
 
@@ -29,6 +30,29 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const [loading, setLoading] = React.useState(false);
   const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
   const [outRemarks, setOutRemarks] = React.useState('');
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    onPrimaryPress?: () => void;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'error', onPrimaryPress?: () => void) => {
+    setAlertConfig({ visible: true, title, message, type, onPrimaryPress });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+    if (alertConfig.onPrimaryPress) {
+      alertConfig.onPrimaryPress();
+    }
+  };
 
   const { isPipMode, setPipAllowed } = usePipMode();
 
@@ -94,50 +118,44 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         return;
       }
       if (result.errorCode || !result.assets || result.assets.length === 0) {
-        Alert.alert('Error', 'Failed to capture selfie for punch out.');
+        showAlert('Error', 'Failed to capture selfie for punch out.');
         setLoading(false);
         return;
       }
 
       const base64Selfie = result.assets[0].base64;
       if (!base64Selfie) {
-        Alert.alert('Error', 'Failed to read image data.');
+        showAlert('Error', 'Failed to read image data.');
         setLoading(false);
         return;
       }
 
-      Geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const payload = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              selfie: base64Selfie,
-              timestamp: new Date().toISOString(),
-              out_remarks: outRemarks,
-            };
-            
-            await dispatch(postPunchOut(payload)).unwrap();
-            await LocationService.stopTracking();
-            
-            Alert.alert('Success', 'Punched out successfully!', [
-              { text: 'OK', onPress: () => navigation.navigate('MainTabs') }
-            ]);
-          } catch (err) {
-            Alert.alert('Error', 'Failed to punch out. Please try again.');
-            console.error('Punch out error:', err);
-            setLoading(false);
-          }
-        },
-        (error) => {
-          Alert.alert('Location Error', 'Failed to get current location: ' + error.message);
-          console.error('Map location error:', error);
-          setLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
+      try {
+        const position = await LocationService.getAccurateLocation();
+        const payload = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          selfie: base64Selfie,
+          timestamp: new Date().toISOString(),
+          out_remarks: outRemarks,
+        };
+        
+        await dispatch(postPunchOut(payload)).unwrap();
+        await LocationService.stopTracking();
+        
+        showAlert('Success', 'Punched out successfully!', 'success', () => navigation.navigate('MainTabs'));
+      } catch (err: any) {
+        if (err.message && err.message.includes('Location timeout')) {
+          showAlert('Location Error', 'Failed to get an accurate GPS lock. Please try again outside.');
+        } else {
+          showAlert('Error', 'Failed to punch out. Please try again.');
+          console.error('Punch out error:', err);
+        }
+      } finally {
+        setLoading(false);
+      }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred during punch out.');
+      showAlert('Error', 'An unexpected error occurred during punch out.');
       console.error(err);
       setLoading(false);
     }
@@ -268,6 +286,14 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           />
         )}
       </ScrollView>
+
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onPrimaryPress={closeAlert}
+      />
     </SafeAreaView>
   );
 };

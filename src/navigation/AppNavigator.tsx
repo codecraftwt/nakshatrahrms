@@ -16,6 +16,7 @@ import { ApplyLeaveScreen } from '../screens/ApplyLeaveScreen';
 import { LeaveDetailScreen } from '../screens/LeaveDetailScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AllLeavesScreen } from '../screens/AllLeavesScreen';
+import { AllLogsScreen } from '../screens/AllLogsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -43,6 +44,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="LeaveDetailScreen" component={LeaveDetailScreen} />
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
       <Stack.Screen name="AllLeavesScreen" component={AllLeavesScreen} />
+      <Stack.Screen name="AllLogsScreen" component={AllLogsScreen} />
     </Stack.Navigator>
     </>
   );

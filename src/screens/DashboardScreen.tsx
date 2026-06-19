@@ -78,6 +78,15 @@ export const DashboardScreen = ({ navigation }: any) => {
     ).start();
   }, [scaleAnim]);
 
+  // Auto-resume background tracking if app was killed and reopened
+  React.useEffect(() => {
+    if (dashboardData?.attendance_state === 'checked_in' && user?.track_live_location !== false) {
+      LocationService.startTracking().catch((err) => 
+        console.warn('Dashboard: Failed to auto-resume tracking:', err)
+      );
+    }
+  }, [dashboardData?.attendance_state, user?.track_live_location]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Premium Header */}
