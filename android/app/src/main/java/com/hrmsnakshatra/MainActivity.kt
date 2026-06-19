@@ -2,6 +2,7 @@ package com.hrmsnakshatra
 
 import android.app.PictureInPictureParams
 import android.content.res.Configuration
+import android.os.Bundle
 import android.os.Build
 import android.util.Rational
 import com.facebook.react.ReactActivity
@@ -10,6 +11,10 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(null)
+  }
 
   override fun getMainComponentName(): String = "HRMSNakshatra"
 
@@ -21,7 +26,7 @@ class MainActivity : ReactActivity() {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           if (PipModule.isPipAllowed) {
               val params = PictureInPictureParams.Builder()
-                  .setAspectRatio(Rational(1, 1))
+                  .setAspectRatio(Rational(16, 9))
                   .build()
               enterPictureInPictureMode(params)
           }
