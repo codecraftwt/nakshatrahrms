@@ -75,51 +75,82 @@ export const AttendanceScreen = ({ navigation }: any) => {
     const month = selectedDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     const today = new Date();
     const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-    
+
     let cells = [];
-    
+
+    // const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+    // const record = historyData?.records?.find((r: any) => r.date === dateStr);
+
     // Empty cells for days before the 1st
     for (let i = 0; i < firstDay; i++) {
       cells.push(<View key={`empty-${i}`} style={styles.emptyDay} />);
     }
-    
+
     // Days of the month
     for (let d = 1; d <= daysInMonth; d++) {
       let isToday = isCurrentMonth && d === today.getDate();
       let status = '';
-      
+
       // Map actual API data if available
       const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
       const record = historyData?.records?.find((r: any) => r.date === dateStr);
 
       if (record) {
         if (record.status === 'absent' || record.status === 'leave') {
-            status = 'absent';
+          status = 'absent';
         } else if (record.status === 'half_day' || record.status === 'present' || record.attendances?.length > 0) {
-            status = 'present';
+          status = 'present';
         }
       } else {
         // Fallback simple logic
         const dayOfWeek = new Date(year, month, d).getDay();
         if (dayOfWeek !== 0 && dayOfWeek !== 6) {
           if (new Date(year, month, d) < today) {
-             status = 'absent';
+            status = 'absent';
           }
         }
       }
 
+      // cells.push(
+      //   <View 
+      //     key={`day-${d}`} 
+      //     style={[
+      //       styles.dayCell, 
+      //       status === 'present' && styles.presentCell,
+      //       status === 'absent' && styles.absentCell,
+      //       isToday && styles.todayCell
+      //     ]}
+      //   >
+      //     {isToday && <View style={styles.todayIndicator} />}
+      //     <Text style={[
+      //       styles.dayText,
+      //       status === 'present' && styles.presentText,
+      //       status === 'absent' && styles.absentText,
+      //       isToday && styles.todayText
+      //     ]}>{d}</Text>
+      //   </View>
+      // );
+
       cells.push(
-        <View 
-          key={`day-${d}`} 
+        <TouchableOpacity
+          key={`day-${d}`}
           style={[
-            styles.dayCell, 
+            styles.dayCell,
             status === 'present' && styles.presentCell,
             status === 'absent' && styles.absentCell,
             isToday && styles.todayCell
           ]}
+          onPress={() => {
+            // Only navigate if there's attendance data or it's a past date
+            const recordData = historyData?.records?.find((r: any) => r.date === dateStr);
+            if (recordData || new Date(year, month, d) < new Date()) {
+              navigation.navigate('RouteDetailScreen', { date: dateStr });
+            }
+          }}
+          activeOpacity={0.7}
         >
           {isToday && <View style={styles.todayIndicator} />}
           <Text style={[
@@ -128,17 +159,17 @@ export const AttendanceScreen = ({ navigation }: any) => {
             status === 'absent' && styles.absentText,
             isToday && styles.todayText
           ]}>{d}</Text>
-        </View>
+        </TouchableOpacity>
       );
     }
-    
+
     // Empty cells for the end of the month to fix spacing
     const totalItems = firstDay + daysInMonth;
     const remainingCells = (7 - (totalItems % 7)) % 7;
     for (let i = 0; i < remainingCells; i++) {
       cells.push(<View key={`empty-end-${i}`} style={styles.emptyDay} />);
     }
-    
+
     return cells;
   };
 
@@ -146,8 +177,8 @@ export const AttendanceScreen = ({ navigation }: any) => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Attendance</Text>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.headerSyncBtn}
           onPress={() => dispatch(syncAttendance({}))}
           disabled={syncLoading}
@@ -162,7 +193,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Today's Status Card */}
         <View style={[styles.calendarCard, { marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 }]}>
           <View>
@@ -187,14 +218,14 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
         {/* Month Navigator */}
         <View style={styles.monthNavContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navButton}
             onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1))}
           >
             <Icon name="chevron-left" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.monthTextContainer} 
+          <TouchableOpacity
+            style={styles.monthTextContainer}
             activeOpacity={0.7}
             onPress={handleOpenPicker}
           >
@@ -202,7 +233,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
             <Text style={styles.monthText}>{getMonthYearText(selectedDate)}</Text>
             <Icon name="chevron-down" size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navButton}
             onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))}
           >
@@ -233,7 +264,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
               <Text key={idx} style={styles.dayHeaderText}>{day}</Text>
             ))}
           </View>
-          
+
           <View style={styles.calendarGrid}>
             {renderCalendarGrid()}
           </View>
@@ -248,7 +279,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
         >
           <Pressable style={styles.modalOverlay} onPress={() => setShowPicker(false)}>
             <Pressable style={styles.pickerModalContent}>
-              
+
               <View style={styles.pickerHeader}>
                 <TouchableOpacity onPress={() => setPickerYear(y => y - 1)} style={styles.pickerNavBtn}>
                   <Icon name="chevron-left" size={24} color={colors.textPrimary} />
@@ -263,8 +294,8 @@ export const AttendanceScreen = ({ navigation }: any) => {
                 {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((mon, idx) => {
                   const isSelected = selectedDate.getMonth() === idx && selectedDate.getFullYear() === pickerYear;
                   return (
-                    <TouchableOpacity 
-                      key={idx} 
+                    <TouchableOpacity
+                      key={idx}
                       style={[styles.monthCell, isSelected && styles.monthCellSelected]}
                       onPress={() => selectMonth(idx)}
                     >
@@ -300,41 +331,41 @@ export const AttendanceScreen = ({ navigation }: any) => {
                   let iconColor = item.status === 'leave' ? colors.warning : colors.success;
 
                   return (
-                  <TouchableOpacity 
-                    key={idx} 
-                    style={styles.listCard}
-                    activeOpacity={0.8}
-                    onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
-                  >
-                    <View style={styles.listIconBox}>
-                      <Icon 
-                        name={iconName} 
-                        size={24} 
-                        color={iconColor} 
-                      />
-                    </View>
-                    <View style={styles.listTextContainer}>
-                      <Text style={styles.itemDate}>{item.date}</Text>
-                      {attendance?.check_in && <Text style={styles.itemTime}>In: {(() => {
-                        let isoStr = attendance.check_in;
-                        if (isoStr.includes(' ') && !isoStr.includes('T')) {
-                          isoStr = isoStr.replace(' ', 'T') + 'Z';
-                        }
-                        const d = new Date(isoStr);
-                        if (isNaN(d.getTime())) return attendance.check_in.split(' ')[1];
-                        let hours = d.getHours();
-                        let minutes = d.getMinutes().toString().padStart(2, '0');
-                        const ampm = hours >= 12 ? 'PM' : 'AM';
-                        hours = hours % 12;
-                        hours = hours ? hours : 12;
-                        return `${hours}:${minutes} ${ampm}`;
-                      })()}</Text>}
-                      {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
-                    </View>
-                    <StatusBadge status={badgeStatus as any} />
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.listCard}
+                      activeOpacity={0.8}
+                      onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
+                    >
+                      <View style={styles.listIconBox}>
+                        <Icon
+                          name={iconName}
+                          size={24}
+                          color={iconColor}
+                        />
+                      </View>
+                      <View style={styles.listTextContainer}>
+                        <Text style={styles.itemDate}>{item.date}</Text>
+                        {attendance?.check_in && <Text style={styles.itemTime}>In: {(() => {
+                          let isoStr = attendance.check_in;
+                          if (isoStr.includes(' ') && !isoStr.includes('T')) {
+                            isoStr = isoStr.replace(' ', 'T') + 'Z';
+                          }
+                          const d = new Date(isoStr);
+                          if (isNaN(d.getTime())) return attendance.check_in.split(' ')[1];
+                          let hours = d.getHours();
+                          let minutes = d.getMinutes().toString().padStart(2, '0');
+                          const ampm = hours >= 12 ? 'PM' : 'AM';
+                          hours = hours % 12;
+                          hours = hours ? hours : 12;
+                          return `${hours}:${minutes} ${ampm}`;
+                        })()}</Text>}
+                        {leave && !attendance && <Text style={styles.itemTime}>{leave.leave_type?.name}</Text>}
+                      </View>
+                      <StatusBadge status={badgeStatus as any} />
+                    </TouchableOpacity>
                   )
-              })}
+                })}
               {(!historyData?.records || historyData.records.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).length === 0) && (
                 <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No recent logs found.</Text>
               )}
@@ -438,7 +469,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     rowGap: 8,
   },
   dayCell: {
-    width: '13%', 
+    width: '13%',
     aspectRatio: 1,
     borderRadius: 20, // Make them fully round instead of slightly rounded
     justifyContent: 'center',
@@ -600,8 +631,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
   },
   summaryContainer: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   summaryTile: {

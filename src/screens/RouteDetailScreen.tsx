@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator,BackHandler  } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,6 +27,27 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const mapRef = useRef<MapView>(null);
+
+
+    const sessions = routeData?.attendance_sessions || [];
+
+  // Handle hardware back button
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (sessions.length > 1 && selectedSessionId !== null) {
+          setSelectedSessionId(null);
+          return true;
+        }
+        navigation.goBack();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [sessions.length, selectedSessionId, navigation])
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -72,7 +93,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
     return `${hours}:${minutes} ${ampm}`;
   };
 
-  const sessions = routeData?.attendance_sessions || [];
+  // const sessions = routeData?.attendance_sessions || [];
 
   // 1. Loading State
   if (routeLoading) {
