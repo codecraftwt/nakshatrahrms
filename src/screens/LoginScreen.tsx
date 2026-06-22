@@ -13,8 +13,8 @@ import { loginCandidate } from '../redux/slice/authSlice';
 import { RootState, AppDispatch } from '../redux/store';
 
 export const LoginScreen = ({ navigation }: any) => {
-  const [email, setEmail] = useState('mobile_api');
-  const [password, setPassword] = useState('123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = createStyles(colors);
@@ -37,17 +37,17 @@ export const LoginScreen = ({ navigation }: any) => {
       <View style={styles.shape2} />
       <View style={styles.shape3} />
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          
+
           <View style={styles.headerArea}>
             <View style={styles.logoCircle}>
               <View style={{ transform: [{ rotate: '-45deg' }] }}>
@@ -91,8 +91,8 @@ export const LoginScreen = ({ navigation }: any) => {
               </Text>
             ) : null}
 
-            <PrimaryButton 
-              label={loading ? "Signing in..." : "Sign in"} 
+            <PrimaryButton
+              label={loading ? "Signing in..." : "Sign in"}
               onPress={handleLogin}
               disabled={loading || !email || !password}
               style={styles.signInButton}

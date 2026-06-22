@@ -8,6 +8,7 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import { store, persistor, RootState } from './src/redux/store';
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
+import { navigationRef } from './src/navigation/navigationService';
 
 const App = () => {
   return (
@@ -15,7 +16,7 @@ const App = () => {
        <Provider store={store}>
         <PersistGate loading={null} persistor={persistor}>
       <SafeAreaProvider>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <AppNavigator />
         </NavigationContainer>
       </SafeAreaProvider>

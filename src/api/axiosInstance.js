@@ -31,16 +31,49 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle global 401 Unauthenticated errors
+let isSessionExpiredAlertShown = false;
+
+const handleSessionExpired = () => {
+  if (isSessionExpiredAlertShown) return;
+  isSessionExpiredAlertShown = true;
+  
+  const { store } = require('../redux/store');
+  const { setSessionExpiredModalVisible } = require('../redux/slice/authSlice');
+  
+  store.dispatch(setSessionExpiredModalVisible(true));
+  
+  // Reset the throttle flag after a delay so it works for the next login session
+  setTimeout(() => {
+    isSessionExpiredAlertShown = false;
+  }, 5000);
+};
+
+// Response interceptor to handle global token expiration
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Handle cases where the server returns 200 OK but with the error in the JSON payload
+    const msg = response.data?.message?.toLowerCase() || '';
+    if (
+      response.data?.status === false &&
+      msg.includes("invalid or expired token")
+    ) {
+      if (response.config && !response.config.url.includes('/auth/logout')) {
+        handleSessionExpired();
+      }
+    }
+    return response;
+  },
   (error) => {
-    if (error.response && error.response.status === 401) {
-      // If server returns 401, token is invalid/expired. 
-      // Do not automatically log out the user per requirement
-      // const { store } = require('../redux/store');
-      // store.dispatch(logout());
-      // store.dispatch(clearProfile());
+    if (error.response) {
+      const isUnauthorized = error.response.status === 401;
+      const msg = error.response.data?.message?.toLowerCase() || '';
+      const hasExpiredMessage = msg.includes("invalid or expired token");
+      
+      if (isUnauthorized || hasExpiredMessage) {
+        if (error.config && !error.config.url.includes('/auth/logout')) {
+          handleSessionExpired();
+        }
+      }
     }
     return Promise.reject(error);
   }

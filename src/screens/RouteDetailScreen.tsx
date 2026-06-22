@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
@@ -26,6 +26,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const { historyData } = useSelector((state: RootState) => state.attendance);
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const mapRef = useRef<MapView>(null);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -149,10 +150,17 @@ export const RouteDetailScreen = ({ navigation }: any) => {
     ? sessions.find((s: any) => s.attendance_id === selectedSessionId)
     : (sessions.length === 1 ? sessions[0] : null);
 
-  const routePoints = (activeSession ? activeSession.route : routeData?.route)?.map((pt: any) => ({
-    latitude: Number(pt.lat || pt.latitude),
-    longitude: Number(pt.lng || pt.longitude),
-  })) || [];
+  const routePoints = (activeSession ? activeSession.route : routeData?.route)
+    ?.slice()
+    .sort((a: any, b: any) => {
+      const timeA = new Date(a.datetime || a.recorded_at || 0).getTime();
+      const timeB = new Date(b.datetime || b.recorded_at || 0).getTime();
+      return timeA - timeB;
+    })
+    .map((pt: any) => ({
+      latitude: Number(pt.lat || pt.latitude),
+      longitude: Number(pt.lng || pt.longitude),
+    })) || [];
 
   const startLocation = routePoints.length > 0 ? routePoints[0] : null;
   const endLocation = routePoints.length > 0 ? routePoints[routePoints.length - 1] : null;
@@ -188,6 +196,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
         <View style={styles.mapBox}>
           {routePoints.length > 0 ? (
             <MapView
+              ref={mapRef}
               provider={PROVIDER_GOOGLE}
               style={{ width: '100%', height: '100%', borderRadius: 12 }}
               initialRegion={{
@@ -195,6 +204,14 @@ export const RouteDetailScreen = ({ navigation }: any) => {
                 longitude: startLocation.longitude,
                 latitudeDelta: 0.05,
                 longitudeDelta: 0.05,
+              }}
+              onLayout={() => {
+                if (routePoints.length > 1 && mapRef.current) {
+                  mapRef.current.fitToCoordinates(routePoints, {
+                    edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+                    animated: false,
+                  });
+                }
               }}
             >
               <Polyline

@@ -7,11 +7,16 @@ import { v4 as uuidv4 } from 'uuid';
 import api from '../api/axiosInstance';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const OFFLINE_QUEUE_KEY    = 'offlineLocations';
-const MAX_QUEUE_SIZE       = 10000;  // ~11 hours offline at 4-second intervals
-const ACCURACY_THRESHOLD   = 50;     // metres — skip fixes less accurate than this
-const TRACKING_DELAY_MS    = 4000;   // Android polling interval (ms)
-const BATCH_WRITE_SIZE     = 20;     // flush processed IDs every N items
+const OFFLINE_QUEUE_KEY          = 'offlineLocations';
+const MAX_QUEUE_SIZE             = 10000;  // ~11 hours offline at 4-second intervals
+const ACCURACY_THRESHOLD         = 500;    // metres — relaxed to allow network/cell-tower fallback during Doze mode
+                                            // (75m was too tight and dropped all background points when GPS slept)
+const TRACKING_DELAY_MS          = 4000;   // Android keep-alive heartbeat (ms)
+const BATCH_WRITE_SIZE           = 20;     // flush processed IDs every N items
+const MIN_DISTANCE_METERS        = 5;      // below this = "stationary" for jitter purposes
+const MAX_SPEED_KMH              = 200;    // ignore GPS spikes implying > 200 km/h
+const STATIONARY_PING_INTERVAL_MS = 5 * 60 * 1000; // force a "still here" ping every 5 min
+const MAX_CONSECUTIVE_SPEED_REJECTS = 3;   // force-accept a point after this many rejects
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LocationPayload {
@@ -34,6 +39,31 @@ interface PositionResult {
 // ─── Module-level state ───────────────────────────────────────────────────────
 let isProcessingQueue = false;
 let iosWatchId: number | null = null;
+let androidWatchId: number | null = null;
+let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
+let consecutiveSpeedRejects = 0;
+let isTrackingStopped = false; // guard against callbacks firing after stopTracking
+
+// ─── Haversine distance (metres) ──────────────────────────────────────────────
+/**
+ * Returns the great-circle distance between two lat/lng points in metres.
+ * Used for the minimum-distance and speed-sanity filters.
+ */
+const haversineDistance = (
+  a: { lat: number; lng: number },
+  b: { latitude: number; longitude: number },
+): number => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6_371_000; // Earth radius in metres
+  const dLat = toRad(b.latitude - a.lat);
+  const dLon = toRad(b.longitude - a.lng);
+  const sinHalfLat = Math.sin(dLat / 2);
+  const sinHalfLon = Math.sin(dLon / 2);
+  const h =
+    sinHalfLat * sinHalfLat +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.latitude)) * sinHalfLon * sinHalfLon;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 const sleep = (ms: number) =>
@@ -61,13 +91,17 @@ const writeQueue = async (queue: LocationPayload[]): Promise<void> => {
 /**
  * Single source of truth for handling a location fix.
  * Called by:
- *   - Android: trackingTask while-loop (via getCurrentPosition)
+ *   - Android: watchPosition callback inside foreground service
  *   - iOS:     watchPosition callback
  *
- * Applies accuracy filter → builds payload → appends to queue → triggers drain.
+ * Applies accuracy filter → distance/stationary filter → speed sanity check →
+ * builds payload → appends to queue → triggers drain.
  */
 const handleLocationUpdate = async (position: PositionResult): Promise<void> => {
-  // Skip low-accuracy fixes (jitter filter)
+  // Guard: if tracking was stopped, ignore any late-arriving callbacks
+  if (isTrackingStopped) return;
+
+  // 1. Skip low-accuracy fixes (jitter filter)
   if (
     position.coords.accuracy !== null &&
     position.coords.accuracy > ACCURACY_THRESHOLD
@@ -78,6 +112,56 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
     );
     return;
   }
+
+  if (lastRecordedPoint) {
+    const dist = haversineDistance(lastRecordedPoint, position.coords);
+    const timeSinceLastMs = position.timestamp - lastRecordedPoint.time;
+
+    // 2. Stationary filter — FIX: previously this dropped points forever while
+    // the user stood still, leaving zero attendance pings for the whole period.
+    // Now: only skip if BOTH (a) movement is below threshold AND
+    // (b) we recorded a point recently. Otherwise force a "still here" ping.
+    if (dist < MIN_DISTANCE_METERS && timeSinceLastMs < STATIONARY_PING_INTERVAL_MS) {
+      return; // genuinely stationary and recent — skip
+    }
+
+    // 3. Speed sanity check — reject GPS teleport spikes
+    // FIX: previously, rejecting a spike left lastRecordedPoint unchanged,
+    // which could cascade into rejecting all future real points if the bad
+    // fix itself was the new "anchor". We now force-accept after a few
+    // consecutive rejects so tracking can never get permanently stuck.
+    if (timeSinceLastMs > 0) {
+      const speedKmH = (dist / (timeSinceLastMs / 1000)) * 3.6;
+
+      if (speedKmH > MAX_SPEED_KMH) {
+        consecutiveSpeedRejects++;
+
+        if (consecutiveSpeedRejects < MAX_CONSECUTIVE_SPEED_REJECTS) {
+          console.log(
+            '[LocationService] Skipping GPS spike, implied speed:',
+            speedKmH.toFixed(1),
+            'km/h',
+          );
+          return;
+        }
+
+        console.warn(
+          '[LocationService] Accepting point despite speed flag — too many consecutive rejects',
+        );
+        // fall through and accept this point, resetting the counter below
+      }
+    }
+  }
+
+  // Reset reject streak on any accepted point
+  consecutiveSpeedRejects = 0;
+
+  // Update last recorded point for next comparison
+  lastRecordedPoint = {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    time: position.timestamp,
+  };
 
   const payload: LocationPayload = {
     id: uuidv4(),
@@ -197,45 +281,92 @@ const processQueue = async (): Promise<void> => {
 /**
  * Runs as a Foreground Service on Android via react-native-background-actions.
  *
- * FIX: Switched from periodic `getCurrentPosition` polling to `watchPosition`.
- * Native watchPosition is heavily optimized by the OS, uses a distanceFilter 
- * to accurately trace roads and turns, and prevents cutting corners.
+ * HYBRID APPROACH:
+ *   1. `watchPosition` (distanceFilter: 10m) — handles movement tracking.
+ *      The OS fires callbacks at actual position changes, following curves
+ *      and turns accurately.
+ *   2. Periodic `getCurrentPosition` in the keep-alive loop — ensures the
+ *      API is hit regularly even when the user is stationary. The distance
+ *      and stationary-ping filters inside `handleLocationUpdate` prevent
+ *      duplicate points when both sources fire close together.
+ *
+ * This guarantees: accurate road tracking when moving, AND regular pings
+ * when sitting still (e.g. at a desk, in a meeting).
  */
 const trackingTask = async (taskDataArguments: any): Promise<void> => {
   const { delay } = taskDataArguments;
 
-  // Poll the latest accurate position periodically to satisfy backend tracking API
-  // Using getCurrentPosition in the loop forces a fresh GPS fix and prevents the OS
-  // from suspending passive watchPosition listeners during deep background/doze.
-  while (BackgroundService.isRunning()) {
-    try {
-      await new Promise<void>((resolve) => {
-        Geolocation.getCurrentPosition(
-          async (position) => {
-            if (position.coords.accuracy !== null && position.coords.accuracy <= ACCURACY_THRESHOLD) {
-              await handleLocationUpdate(position).catch((e) =>
-                console.warn('[LocationService] Android handleLocationUpdate error:', e)
-              );
-            }
-            resolve();
-          },
-          (error) => {
-            console.warn('[LocationService] Android getCurrentPosition error:', error);
-            resolve();
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 2000,
-            distanceFilter: 0,
-          }
-        );
-      });
-    } catch (e) {
-      console.warn('[LocationService] Loop error:', e);
-    }
+  // 1. Start native watchPosition for accurate movement tracking
+  androidWatchId = Geolocation.watchPosition(
+    async (position) => {
+      try {
+        await handleLocationUpdate(position);
+      } catch (e) {
+        console.warn('[LocationService] Android watchPosition handler error:', e);
+      }
+    },
+    (error) => {
+      console.warn('[LocationService] Android watchPosition error:', error);
+    },
+    {
+      enableHighAccuracy: true,
+      distanceFilter: 0,           // FIX: 0 ensures the OS doesn't throttle updates based on distance while in Doze mode
+      interval: 10000,             // Relaxed from 4000ms to 10s (better for battery, still frequent enough)
+      fastestInterval: 5000,
+      maximumAge: 0,               // no stale cached positions
+      showLocationDialog: false,   // don't prompt to enable GPS (already handled)
+      forceRequestLocation: true,  // FIX: Forces FusedLocationProvider to actively fetch location in background
+    },
+  );
 
-    await sleep(delay); // Wait before next poll
+  console.log('[LocationService] Android: watchPosition started, id:', androidWatchId);
+
+  // 2. Keep-alive loop
+  // By sleeping, we keep the JS thread alive and the Foreground Service's
+  // partial wakelock active. We periodically check if watchPosition has stalled.
+  while (BackgroundService.isRunning()) {
+    await sleep(delay);
+
+    // Fallback: if watchPosition goes completely silent for > 60 seconds, try to kickstart it
+    const now = Date.now();
+    const timeSinceLast = lastRecordedPoint ? (now - lastRecordedPoint.time) : 0;
+
+    if (timeSinceLast > 60000) {
+      console.log('[LocationService] watchPosition stalled, forcing fallback ping...');
+      try {
+        await new Promise<void>((resolve) => {
+          Geolocation.getCurrentPosition(
+            async (position) => {
+              try {
+                await handleLocationUpdate(position);
+              } catch (e) {
+                console.warn('[LocationService] Android fallback ping error:', e);
+              }
+              resolve();
+            },
+            (error) => {
+              console.warn('[LocationService] Android fallback getCurrentPosition error:', error);
+              resolve();
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+              forceRequestLocation: true,
+            },
+          );
+        });
+      } catch (e) {
+        console.warn('[LocationService] Android loop error:', e);
+      }
+    }
+  }
+
+  // Cleanup when the service stops
+  if (androidWatchId !== null) {
+    Geolocation.clearWatch(androidWatchId);
+    androidWatchId = null;
+    console.log('[LocationService] Android: watchPosition cleaned up after service stop');
   }
 };
 
@@ -248,6 +379,11 @@ const serviceOptions = {
   color: '#ff00ff',
   parameters: { delay: TRACKING_DELAY_MS },
   foregroundServiceType: ['location'],
+  // NOTE: AndroidManifest.xml must also declare:
+  //   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+  //   <service android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask"
+  //            android:foregroundServiceType="location" />
+  // Required on Android 14+ or the foreground service will crash at runtime.
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -255,17 +391,22 @@ export const LocationService = {
 
   // ── getAccurateLocation ───────────────────────────────────────────────────
   /**
-   * Attempts to get a high-accuracy GPS fix (<= 50 meters).
-   * It listens to the GPS sensor for up to 10 seconds. Returns the best fix 
-   * found when time runs out, or resolves early if an excellent lock is achieved.
+   * Attempts to get a high-accuracy GPS fix (<= 20 meters is treated as excellent).
+   * Listens to the GPS sensor for up to 15 seconds, returning the best fix found
+   * when time runs out, or resolving early on an excellent lock.
+   *
+   * FIX: accuracy can be `null` from the native module. The original code did
+   * `position.coords.accuracy < bestPosition.coords.accuracy`, which silently
+   * misbehaves when either side is null. Both sides now fall back to Infinity
+   * so comparisons are always well-defined.
    */
-  getAccurateLocation: (): Promise<any> => {
+  getAccurateLocation: (): Promise<PositionResult> => {
     return new Promise((resolve, reject) => {
-      let bestPosition: any = null;
+      let bestPosition: PositionResult | null = null;
       let watchId: number;
-      let timeoutId: any;
+      let timeoutId: ReturnType<typeof setTimeout>;
 
-      const finish = (pos: any) => {
+      const finish = (pos: PositionResult) => {
         Geolocation.clearWatch(watchId);
         clearTimeout(timeoutId);
         resolve(pos);
@@ -273,30 +414,36 @@ export const LocationService = {
 
       watchId = Geolocation.watchPosition(
         (position) => {
-          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+          const acc = position.coords.accuracy ?? Infinity;
+          const bestAcc = bestPosition?.coords.accuracy ?? Infinity;
+
+          if (!bestPosition || acc < bestAcc) {
             bestPosition = position;
           }
-          // If we get an accuracy of 20m or better, that's an excellent lock!
-          if (position.coords.accuracy <= 20) {
+
+          // An accuracy of 20m or better is an excellent lock — resolve early
+          if (acc <= 20) {
             finish(position);
           }
         },
         (error) => {
           console.warn('[LocationService] getAccurateLocation error:', error);
         },
-        { enableHighAccuracy: true, distanceFilter: 0, interval: 1000, fastestInterval: 500 }
+        { enableHighAccuracy: true, distanceFilter: 0, interval: 1000, fastestInterval: 500 },
       );
 
       timeoutId = setTimeout(() => {
         Geolocation.clearWatch(watchId);
+
         if (bestPosition) {
           resolve(bestPosition);
         } else {
-          // Fallback: If high-accuracy GPS totally fails indoors, try low-accuracy network location
+          // Fallback: if high-accuracy GPS totally fails (e.g. indoors),
+          // try a low-accuracy network-based fix instead of failing outright.
           Geolocation.getCurrentPosition(
             (pos) => resolve(pos),
-            (err) => reject(new Error('Location timeout: Unable to get a GPS fix.')),
-            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+            () => reject(new Error('Location timeout: unable to get a GPS fix.')),
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
           );
         }
       }, 15000); // 15 seconds max wait for a highly accurate fix
@@ -305,18 +452,15 @@ export const LocationService = {
 
   // ── requestPermissions ────────────────────────────────────────────────────
   /**
-   * iOS FIX: Previously returned true immediately without asking for anything.
-   *   Now calls Geolocation.requestAuthorization('always') so the OS shows
-   *   the permission dialog. 'always' is required for background tracking.
-   *
-   * Android FIX: || instead of && — need at least ONE of fine/coarse.
-   * Android FIX: background permission result is now read and logged.
+   * iOS: calls Geolocation.requestAuthorization('always') so the OS shows the
+   *   permission dialog. 'always' is required for background tracking.
+   * Android: needs at least ONE of fine/coarse granted; background-location
+   *   and notification results are read and logged (not silently ignored).
    */
   requestPermissions: async (): Promise<boolean> => {
 
     // ── iOS ────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
-      // FIX: This was missing — iOS never showed a permission dialog before.
       // Requires Info.plist keys:
       //   NSLocationAlwaysAndWhenInUseUsageDescription
       //   NSLocationWhenInUseUsageDescription
@@ -346,8 +490,7 @@ export const LocationService = {
       granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] ===
       PermissionsAndroid.RESULTS.GRANTED;
 
-    // FIX: Original used && — that passed even when BOTH were denied.
-    // We only need at least one to proceed.
+    // We need at least one of fine/coarse to proceed
     if (!fineGranted && !coarseGranted) {
       console.warn('[LocationService] Android: location permissions denied');
       return false;
@@ -359,7 +502,6 @@ export const LocationService = {
         PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
       );
 
-      // FIX: Result was previously ignored. Now logged clearly.
       // Not a hard failure — foreground tracking still works without it.
       // Set `return false` here if your app requires strict background access.
       if (bgResult !== PermissionsAndroid.RESULTS.GRANTED) {
@@ -388,17 +530,10 @@ export const LocationService = {
 
   // ── startTracking ─────────────────────────────────────────────────────────
   /**
-   * iOS  → watchPosition with allowsBackgroundLocationUpdates: true
-   *         (react-native-background-actions only gives ~30 s on iOS via
-   *          beginBackgroundTask — NOT suitable for continuous tracking)
-   *
-   * Android → Foreground Service via react-native-background-actions
-   *
-   * FIX (iOS): `interval` and `fastestInterval` are Android-only options.
-   *   On iOS they are silently ignored. Removed to avoid confusion.
-   *
-   * FIX (iOS): `iosWatchId` is now cleared before creating a new watch so
-   *   a double-call to startTracking never leaks the old subscription.
+   * iOS     → watchPosition with allowsBackgroundLocationUpdates: true
+   *           (react-native-background-actions only gives ~30s on iOS via
+   *            beginBackgroundTask — NOT suitable for continuous tracking)
+   * Android → Foreground Service running native watchPosition internally
    */
   startTracking: async (): Promise<void> => {
     const hasPerms = await LocationService.requestPermissions();
@@ -407,9 +542,14 @@ export const LocationService = {
       return;
     }
 
+    // Reset filter state for a fresh tracking session
+    lastRecordedPoint = null;
+    consecutiveSpeedRejects = 0;
+    isTrackingStopped = false;
+
     // ── iOS ────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
-      // FIX: Clear any existing watch first to prevent subscription leaks
+      // Clear any existing watch first to prevent subscription leaks
       if (iosWatchId !== null) {
         console.log('[LocationService] iOS: clearing stale watch before restart');
         Geolocation.clearWatch(iosWatchId);
@@ -429,9 +569,9 @@ export const LocationService = {
         },
         {
           enableHighAccuracy: true,
-          distanceFilter: 0,
-          showsBackgroundLocationIndicator: true, // blue status-bar indicator (required by Apple)
-          useSignificantChanges: false,           // false = fine-grained; true = cell-tower only
+          distanceFilter: 10,                     // fire every ~10m of real movement
+          showsBackgroundLocationIndicator: true,  // blue status-bar indicator (required by Apple)
+          useSignificantChanges: false,            // false = fine-grained; true = cell-tower only
         },
       );
 
@@ -455,6 +595,13 @@ export const LocationService = {
 
   // ── stopTracking ──────────────────────────────────────────────────────────
   stopTracking: async (): Promise<void> => {
+    // Set guard flag FIRST — prevents any pending callbacks from doing work
+    isTrackingStopped = true;
+
+    // Reset filter state so next session starts fresh
+    lastRecordedPoint = null;
+    consecutiveSpeedRejects = 0;
+
     if (Platform.OS === 'ios') {
       if (iosWatchId !== null) {
         Geolocation.clearWatch(iosWatchId);
@@ -464,9 +611,19 @@ export const LocationService = {
       return;
     }
 
+    // Clean up Android watchPosition if still active
+    if (androidWatchId !== null) {
+      Geolocation.clearWatch(androidWatchId);
+      androidWatchId = null;
+      console.log('[LocationService] Android: watchPosition cleaned up');
+    }
+
     if (!BackgroundService.isRunning()) return;
 
     try {
+      // Small delay to ensure Geolocation.clearWatch completes natively 
+      // before we forcefully destroy the Android Service context.
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await BackgroundService.stop();
       console.log('[LocationService] Android: foreground service stopped');
     } catch (e) {

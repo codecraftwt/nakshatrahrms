@@ -9,6 +9,7 @@ interface AuthState {
   isLoggedIn: boolean;
   loading: boolean;
   error: string | null;
+  isSessionExpiredModalVisible: boolean;
 }
 
 const initialState: AuthState = {
@@ -18,6 +19,7 @@ const initialState: AuthState = {
   isLoggedIn: false,
   loading: false,
   error: null,
+  isSessionExpiredModalVisible: false,
 };
 
 export const loginCandidate = createAsyncThunk(
@@ -66,6 +68,9 @@ export const logoutCandidate = createAsyncThunk(
       const state = getState() as any;
       const token = state.auth.token;
 
+      // Force immediate UI logout
+      dispatch(logout());
+
       if (token) {
         await api.post('/auth/logout', {}, {
           headers: {
@@ -73,15 +78,9 @@ export const logoutCandidate = createAsyncThunk(
           },
         });
       }
-
-      dispatch(logout());
    
       return true;
     } catch (error: any) {
-
-      // Still logout locally even if API fails (e.g. token expired)
-      dispatch(logout());
-    
       return rejectWithValue(error.response?.data?.message || 'Logout failed');
     }
   }
@@ -101,6 +100,9 @@ const authSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+    },
+    setSessionExpiredModalVisible: (state, action) => {
+      state.isSessionExpiredModalVisible = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -124,5 +126,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { logout, clearError, setSessionExpiredModalVisible } = authSlice.actions;
 export default authSlice.reducer;
