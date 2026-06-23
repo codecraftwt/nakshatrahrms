@@ -43,6 +43,7 @@ let androidWatchId: number | null = null;
 let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
 let consecutiveSpeedRejects = 0;
 let isTrackingStopped = false; // guard against callbacks firing after stopTracking
+let lastLocationCallbackTime = 0; // watchdog timer to detect watchPosition stalls
 
 // ─── Haversine distance (metres) ──────────────────────────────────────────────
 /**
@@ -100,6 +101,9 @@ const writeQueue = async (queue: LocationPayload[]): Promise<void> => {
 const handleLocationUpdate = async (position: PositionResult): Promise<void> => {
   // Guard: if tracking was stopped, ignore any late-arriving callbacks
   if (isTrackingStopped) return;
+
+  // Update watchdog timestamp on any location activity from native side
+  lastLocationCallbackTime = Date.now();
 
   // 1. Skip low-accuracy fixes (jitter filter)
   if (
@@ -329,10 +333,12 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
 
     // Fallback: if watchPosition goes completely silent for > 60 seconds, try to kickstart it
     const now = Date.now();
-    const timeSinceLast = lastRecordedPoint ? (now - lastRecordedPoint.time) : 0;
+    const timeSinceLastUpdate = now - lastLocationCallbackTime;
 
-    if (timeSinceLast > 60000) {
+    if (timeSinceLastUpdate > 60000) {
       console.log('[LocationService] watchPosition stalled, forcing fallback ping...');
+      lastLocationCallbackTime = now; // Prevent immediate re-trigger while fetching
+      
       try {
         await new Promise<void>((resolve) => {
           Geolocation.getCurrentPosition(
@@ -500,15 +506,21 @@ export const LocationService = {
     if (Platform.Version >= 29) {
       const bgResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+        {
+          title: 'Allow Background Location Access',
+          message:
+            'This app tracks your location in the background to record your route while you are punched in for attendance.\n\nPlease select "Allow all the time" in the next screen.',
+          buttonPositive: 'Continue',
+          buttonNegative: 'Cancel',
+        },
       );
 
-      // Not a hard failure — foreground tracking still works without it.
-      // Set `return false` here if your app requires strict background access.
       if (bgResult !== PermissionsAndroid.RESULTS.GRANTED) {
         console.warn(
           '[LocationService] Android: background location denied — ' +
-          'tracking will only work while the app is in the foreground',
+          'tracking requires "Allow all the time" permission.',
         );
+        return false; // Require background location for continuous tracking
       }
     }
 
@@ -546,6 +558,7 @@ export const LocationService = {
     lastRecordedPoint = null;
     consecutiveSpeedRejects = 0;
     isTrackingStopped = false;
+    lastLocationCallbackTime = Date.now();
 
     // ── iOS ────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
@@ -601,6 +614,7 @@ export const LocationService = {
     // Reset filter state so next session starts fresh
     lastRecordedPoint = null;
     consecutiveSpeedRejects = 0;
+    lastLocationCallbackTime = 0;
 
     if (Platform.OS === 'ios') {
       if (iosWatchId !== null) {
