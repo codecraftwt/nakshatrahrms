@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, ScrollView, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, PermissionsAndroid, TextInput } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -190,7 +191,7 @@ export const PunchInScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={20}>
         <View style={styles.cameraContainer}>
           <TouchableOpacity style={styles.cameraBox} onPress={takeSelfie} activeOpacity={0.8}>
             {selfieUri ? (
@@ -265,7 +266,7 @@ export const PunchInScreen = ({ navigation }: any) => {
           )}
           <Text style={styles.helperText}>GPS + selfie will be captured</Text>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <CustomAlertModal
         visible={alertConfig.visible}

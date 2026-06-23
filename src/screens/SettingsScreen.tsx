@@ -48,8 +48,6 @@ export const SettingsScreen = ({ navigation }: any) => {
         
         <Text style={styles.sectionTitle}>Preferences</Text>
         <View style={styles.card}>
-          {renderSettingItem('bell-outline', 'Push Notifications', () => {})}
-          <View style={styles.divider} />
           {renderSettingItem(
             isDarkMode ? 'weather-night' : 'weather-sunny', 
             'Dark Mode', 
@@ -61,33 +59,20 @@ export const SettingsScreen = ({ navigation }: any) => {
               thumbColor={'#FFFFFF'}
             />
           )}
-          <View style={styles.divider} />
-          {renderSettingItem('translate', 'Language', () => {}, <Text style={styles.valueText}>English</Text>)}
         </View>
 
         <Text style={styles.sectionTitle}>Security & Privacy</Text>
         <View style={styles.card}>
-          {renderSettingItem('lock-outline', 'Change Password', () => {})}
-          <View style={styles.divider} />
-          {renderSettingItem('fingerprint', 'Biometric Login', undefined, 
-            <Switch 
-              value={true} 
-              onValueChange={() => {}} 
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={'#FFFFFF'}
-            />
-          )}
-          <View style={styles.divider} />
-          {renderSettingItem('shield-account-outline', 'Privacy Policy', () => {})}
+          {renderSettingItem('shield-account-outline', 'Privacy Policy', () => navigation.navigate('PrivacyPolicyScreen'))}
         </View>
 
         <Text style={styles.sectionTitle}>Support</Text>
         <View style={styles.card}>
-          {renderSettingItem('help-circle-outline', 'Help Center', () => {})}
+          {renderSettingItem('help-circle-outline', 'Help Center', () => navigation.navigate('HelpCenterScreen'))}
           <View style={styles.divider} />
-          {renderSettingItem('message-text-outline', 'Contact Us', () => {})}
+          {renderSettingItem('message-text-outline', 'Contact Us', () => navigation.navigate('ContactUsScreen'))}
           <View style={styles.divider} />
-          {renderSettingItem('information-outline', 'About App', () => {}, <Text style={styles.valueText}>v1.0.0</Text>)}
+          {renderSettingItem('information-outline', 'About App', undefined, <Text style={styles.valueText}>v1.0.0</Text>)}
         </View>
 
 

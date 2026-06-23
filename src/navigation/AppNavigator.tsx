@@ -22,6 +22,9 @@ import { LeaveDetailScreen } from '../screens/LeaveDetailScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AllLeavesScreen } from '../screens/AllLeavesScreen';
 import { AllLogsScreen } from '../screens/AllLogsScreen';
+import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
+import { HelpCenterScreen } from '../screens/HelpCenterScreen';
+import { ContactUsScreen } from '../screens/ContactUsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +68,9 @@ export const AppNavigator = () => {
         <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
         <Stack.Screen name="AllLeavesScreen" component={AllLeavesScreen} />
         <Stack.Screen name="AllLogsScreen" component={AllLogsScreen} />
+        <Stack.Screen name="PrivacyPolicyScreen" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="HelpCenterScreen" component={HelpCenterScreen} />
+        <Stack.Screen name="ContactUsScreen" component={ContactUsScreen} />
       </Stack.Navigator>
 
       <CustomAlertModal

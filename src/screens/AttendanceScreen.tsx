@@ -99,8 +99,10 @@ export const AttendanceScreen = ({ navigation }: any) => {
       const record = historyData?.records?.find((r: any) => r.date === dateStr);
 
       if (record) {
-        if (record.status === 'absent' || record.status === 'leave') {
+        if (record.status === 'absent') {
           status = 'absent';
+        } else if (record.status === 'leave') {
+          status = 'leave';
         } else if (record.status === 'half_day' || record.status === 'present' || record.attendances?.length > 0) {
           status = 'present';
         }
@@ -141,12 +143,11 @@ export const AttendanceScreen = ({ navigation }: any) => {
             styles.dayCell,
             status === 'present' && styles.presentCell,
             status === 'absent' && styles.absentCell,
+            status === 'leave' && styles.leaveCell,
             isToday && styles.todayCell
           ]}
           onPress={() => {
-            // Only navigate if there's attendance data or it's a past date
-            const recordData = historyData?.records?.find((r: any) => r.date === dateStr);
-            if (recordData || new Date(year, month, d) < new Date()) {
+            if (status === 'present') {
               navigation.navigate('RouteDetailScreen', { date: dateStr });
             }
           }}
@@ -157,6 +158,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
             styles.dayText,
             status === 'present' && styles.presentText,
             status === 'absent' && styles.absentText,
+            status === 'leave' && styles.leaveText,
             isToday && styles.todayText
           ]}>{d}</Text>
         </TouchableOpacity>
@@ -251,9 +253,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
             <Text style={[styles.summaryValue, { color: colors.dangerText }]}>{summaryData?.summary?.absent || 0}</Text>
             <Text style={[styles.summaryLabel, { color: colors.dangerText }]}>Absent</Text>
           </View>
-          <View style={[styles.summaryTile, { backgroundColor: colors.primaryBg }]}>
-            <Text style={[styles.summaryValue, { color: colors.primary }]}>{summaryData?.summary?.leave || 0}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.primary }]}>Leave</Text>
+          <View style={[styles.summaryTile, { backgroundColor: colors.warningBg }]}>
+            <Text style={[styles.summaryValue, { color: colors.warningText }]}>{summaryData?.summary?.leave || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.warningText }]}>Leave</Text>
           </View>
         </View>
 
@@ -335,7 +337,11 @@ export const AttendanceScreen = ({ navigation }: any) => {
                       key={idx}
                       style={styles.listCard}
                       activeOpacity={0.8}
-                      onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
+                      onPress={() => {
+                        if (badgeStatus === 'present') {
+                          navigation.navigate('RouteDetailScreen', { date: item.date });
+                        }
+                      }}
                     >
                       <View style={styles.listIconBox}>
                         <Icon
@@ -496,6 +502,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   absentText: {
     color: colors.dangerText,
+    fontWeight: '600',
+  },
+  leaveCell: {
+    backgroundColor: colors.warningBg,
+  },
+  leaveText: {
+    color: colors.warningText,
     fontWeight: '600',
   },
   todayCell: {

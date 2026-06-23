@@ -150,13 +150,15 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
         )}
 
         {/* Action Button */}
-        <OutlineButton 
-          label="Cancel Request"
-          onPress={() => setIsCancelModalVisible(true)}
-          color={colors.danger}
-          style={styles.cancelBtn}
-          disabled={isPastLeave}
-        />
+        {leave.status === 'pending' && (
+          <OutlineButton 
+            label="Cancel Request"
+            onPress={() => setIsCancelModalVisible(true)}
+            color={colors.danger}
+            style={styles.cancelBtn}
+            disabled={isPastLeave}
+          />
+        )}
 
 
         <View style={{ height: 40 }} />

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -216,7 +217,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={20}>
         <View style={styles.mapBox}>
           {currentLocation ? (
             <MapView
@@ -285,7 +286,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
             style={styles.punchOutBtn}
           />
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <CustomAlertModal
         visible={alertConfig.visible}
