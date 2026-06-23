@@ -175,6 +175,10 @@ export const AttendanceScreen = ({ navigation }: any) => {
     return cells;
   };
 
+  const currentMonthDate = new Date();
+  const isFutureMonthDisabled = selectedDate.getFullYear() > currentMonthDate.getFullYear() || 
+                               (selectedDate.getFullYear() === currentMonthDate.getFullYear() && selectedDate.getMonth() >= currentMonthDate.getMonth());
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -236,8 +240,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
             <Icon name="chevron-down" size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.navButton}
+            style={[styles.navButton, isFutureMonthDisabled && { opacity: 0.5 }]}
             onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))}
+            disabled={isFutureMonthDisabled}
           >
             <Icon name="chevron-right" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -287,7 +292,11 @@ export const AttendanceScreen = ({ navigation }: any) => {
                   <Icon name="chevron-left" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.pickerYearText}>{pickerYear}</Text>
-                <TouchableOpacity onPress={() => setPickerYear(y => y + 1)} style={styles.pickerNavBtn}>
+                <TouchableOpacity 
+                  onPress={() => setPickerYear(y => y + 1)} 
+                  style={[styles.pickerNavBtn, pickerYear >= currentMonthDate.getFullYear() && { opacity: 0.5 }]}
+                  disabled={pickerYear >= currentMonthDate.getFullYear()}
+                >
                   <Icon name="chevron-right" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
               </View>
@@ -295,11 +304,17 @@ export const AttendanceScreen = ({ navigation }: any) => {
               <View style={styles.monthsGrid}>
                 {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((mon, idx) => {
                   const isSelected = selectedDate.getMonth() === idx && selectedDate.getFullYear() === pickerYear;
+                  const isFuture = pickerYear > currentMonthDate.getFullYear() || (pickerYear === currentMonthDate.getFullYear() && idx > currentMonthDate.getMonth());
                   return (
                     <TouchableOpacity
                       key={idx}
-                      style={[styles.monthCell, isSelected && styles.monthCellSelected]}
+                      style={[
+                        styles.monthCell, 
+                        isSelected && styles.monthCellSelected,
+                        isFuture && { opacity: 0.3 }
+                      ]}
                       onPress={() => selectMonth(idx)}
+                      disabled={isFuture}
                     >
                       <Text style={[styles.monthCellText, isSelected && styles.monthCellTextSelected]}>{mon}</Text>
                     </TouchableOpacity>
