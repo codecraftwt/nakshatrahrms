@@ -34,10 +34,16 @@ api.interceptors.request.use(
 let isSessionExpiredAlertShown = false;
 
 const handleSessionExpired = () => {
+  const { store } = require('../redux/store');
+  const state = store.getState();
+  const token = state.auth?.token;
+
+  // Do not show the session expired modal if the user is already logged out or doesn't have a token
+  if (!token) return;
+
   if (isSessionExpiredAlertShown) return;
   isSessionExpiredAlertShown = true;
   
-  const { store } = require('../redux/store');
   const { setSessionExpiredModalVisible } = require('../redux/slice/authSlice');
   
   store.dispatch(setSessionExpiredModalVisible(true));

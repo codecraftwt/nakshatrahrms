@@ -15,8 +15,12 @@ export const AllLogsScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   
   const { historyData } = useSelector((state: RootState) => state.attendance);
+  const { user } = useSelector((state: RootState) => state.auth);
 
-  const logs = historyData?.records?.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).reverse() || [];
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+
+  const logs = historyData?.records?.filter((r: any) => r.date <= todayStr).slice().reverse() || [];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -32,16 +36,33 @@ export const AllLogsScreen = ({ navigation }: any) => {
           {logs.map((item: any, idx: number) => {
             const attendance = item.attendances?.[0];
             const leave = item.leave_requests?.[0];
-            let badgeStatus = item.status === 'leave' ? 'leave' : 'present';
-            let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
-            let iconColor = item.status === 'leave' ? colors.warning : colors.success;
+
+            let badgeStatus = item.status || 'present';
+            let iconName = 'check-circle-outline';
+            let iconColor = colors.success;
+
+            if (badgeStatus === 'leave') {
+              iconName = 'calendar-minus';
+              iconColor = colors.warning;
+            } else if (badgeStatus === 'absent') {
+              iconName = 'close-circle-outline';
+              iconColor = colors.danger;
+            } else if (badgeStatus === 'half_day') {
+              iconName = 'clock-outline';
+              iconColor = '#7C54D1';
+            }
 
             return (
               <TouchableOpacity 
                 key={idx} 
                 style={styles.listCard}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate('RouteDetailScreen', { date: item.date })}
+                disabled={!(badgeStatus === 'present' || badgeStatus === 'half_day') || user?.track_live_location === false}
+                onPress={() => {
+                  if ((badgeStatus === 'present' || badgeStatus === 'half_day') && user?.track_live_location !== false) {
+                    navigation.navigate('RouteDetailScreen', { date: item.date });
+                  }
+                }}
               >
                 <View style={styles.listIconBox}>
                   <Icon 

@@ -5,7 +5,7 @@ import { AppText as Text } from '../components/AppText';
 import { useTheme } from '../theme/ThemeContext';
 import { Typography } from '../theme/typography';
 
-type StatusType = 'present' | 'absent' | 'pending' | 'approved' | 'rejected' | 'active';
+type StatusType = 'present' | 'absent' | 'pending' | 'approved' | 'rejected' | 'active' | 'half_day' | 'leave';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -36,6 +36,16 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     case 'active':
       bgColor = colors.successBg;
       textColor = colors.successText;
+      break;
+    case 'half_day':
+      bgColor = '#EBE5FC';
+      textColor = '#653BB5';
+      label = 'Half Day';
+      break;
+    case 'leave':
+      bgColor = colors.warningBg;
+      textColor = colors.warningText;
+      label = 'Leave';
       break;
   }
 

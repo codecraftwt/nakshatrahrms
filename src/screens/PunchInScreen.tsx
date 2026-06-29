@@ -23,6 +23,7 @@ export const PunchInScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const isLiveTrackingDisabled = user?.track_live_location === false;
   
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieBase64, setSelfieBase64] = useState<string | null>(null);
@@ -190,6 +191,15 @@ export const PunchInScreen = ({ navigation }: any) => {
           <Text style={styles.inRangeText}>In range</Text>
         </View>
       </View>
+
+      {isLiveTrackingDisabled && (
+        <View style={styles.bannerContainer}>
+          <Icon name="alert-circle-outline" size={20} color={colors.warning} style={styles.bannerIcon} />
+          <Text style={styles.bannerText}>
+            Live tracking is disabled. You can only punch in and punch out. Location must be enabled at the time of punching.
+          </Text>
+        </View>
+      )}
 
       <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={20}>
         <View style={styles.cameraContainer}>
@@ -480,5 +490,28 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 12,
+  },
+  bannerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    gap: 8,
+  },
+  bannerIcon: {
+    marginRight: 2,
+  },
+  bannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.warningText,
+    fontWeight: '500',
+    lineHeight: 16,
   },
 });

@@ -12,8 +12,26 @@ import { RootState, AppDispatch } from '../redux/store';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
-import { mockAttendance } from '../data/mockData';
 import { StatusBadge } from '../components/StatusBadge';
+
+const formatDateString = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthNum = parseInt(parts[1], 10);
+      const day = parts[2];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      if (monthNum >= 1 && monthNum <= 12) {
+        return `${day} ${months[monthNum - 1]} ${year}`;
+      }
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+};
 
 export const AttendanceScreen = ({ navigation }: any) => {
   const { colors, theme } = useTheme();
@@ -23,6 +41,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const { todayData, statusData, historyData, summaryData, loading } = useSelector((state: RootState) => state.attendance);
   const { syncLoading, syncSuccess, syncError } = useSelector((state: RootState) => state.payroll);
   const { user } = useSelector((state: RootState) => state.auth);
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
 
   useFocusEffect(
     useCallback(() => {
@@ -34,6 +55,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(selectedDate.getFullYear());
+  const [showStatusDetails, setShowStatusDetails] = useState(false);
 
   React.useEffect(() => {
     const year = selectedDate.getFullYear();
@@ -79,6 +101,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
     const today = new Date();
     const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
 
+
     let cells = [];
 
     // const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
@@ -91,6 +114,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
     // Days of the month
     for (let d = 1; d <= daysInMonth; d++) {
+      const cellDate = new Date(year, month, d);
+      const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const isFuture = cellDate > todayMidnight;
       let isToday = isCurrentMonth && d === today.getDate();
       let status = '';
 
@@ -103,7 +129,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
           status = 'absent';
         } else if (record.status === 'leave') {
           status = 'leave';
-        } else if (record.status === 'half_day' || record.status === 'present' || record.attendances?.length > 0) {
+        } else if (record.status === 'half_day') {
+          status = 'half_day';
+        } else if (record.status === 'present' || record.attendances?.length > 0) {
           status = 'present';
         }
       } else {
@@ -141,13 +169,16 @@ export const AttendanceScreen = ({ navigation }: any) => {
           key={`day-${d}`}
           style={[
             styles.dayCell,
+            isToday && styles.todayCell,
             status === 'present' && styles.presentCell,
             status === 'absent' && styles.absentCell,
             status === 'leave' && styles.leaveCell,
-            isToday && styles.todayCell
+            status === 'half_day' && styles.halfDayCell,
+            isFuture && styles.futureCell
           ]}
+          disabled={isFuture}
           onPress={() => {
-            if (status === 'present') {
+            if (user?.track_live_location !== false) {
               navigation.navigate('RouteDetailScreen', { date: dateStr });
             }
           }}
@@ -156,10 +187,12 @@ export const AttendanceScreen = ({ navigation }: any) => {
           {isToday && <View style={styles.todayIndicator} />}
           <Text style={[
             styles.dayText,
+            isToday && styles.todayText,
             status === 'present' && styles.presentText,
             status === 'absent' && styles.absentText,
             status === 'leave' && styles.leaveText,
-            isToday && styles.todayText
+            status === 'half_day' && styles.halfDayText,
+            isFuture && styles.futureText
           ]}>{d}</Text>
         </TouchableOpacity>
       );
@@ -176,8 +209,8 @@ export const AttendanceScreen = ({ navigation }: any) => {
   };
 
   const currentMonthDate = new Date();
-  const isFutureMonthDisabled = selectedDate.getFullYear() > currentMonthDate.getFullYear() || 
-                               (selectedDate.getFullYear() === currentMonthDate.getFullYear() && selectedDate.getMonth() >= currentMonthDate.getMonth());
+  const isFutureMonthDisabled = selectedDate.getFullYear() > currentMonthDate.getFullYear() ||
+    (selectedDate.getFullYear() === currentMonthDate.getFullYear() && selectedDate.getMonth() >= currentMonthDate.getMonth());
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -201,26 +234,63 @@ export const AttendanceScreen = ({ navigation }: any) => {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Today's Status Card */}
-        <View style={[styles.calendarCard, { marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 }]}>
-          <View>
-            <Text style={{ fontSize: 13, color: colors.textSecondary }}>Today's Status</Text>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginTop: 4, textTransform: 'capitalize' }}>
-              {statusData?.state ? statusData.state.replace('_', ' ') : (todayData?.attendance_state ? todayData.attendance_state.replace('_', ' ') : 'Pending')}
-            </Text>
-            {statusData?.has_punched_in_today && (
-              <Text style={{ fontSize: 12, color: colors.success, marginTop: 2 }}>Punched In</Text>
-            )}
+        <TouchableOpacity
+          style={[styles.calendarCard, { marginBottom: 16, paddingVertical: 16 }]}
+          onPress={() => setShowStatusDetails(!showStatusDetails)}
+          activeOpacity={0.9}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>Today's Status</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginTop: 4, textTransform: 'capitalize' }}>
+                {statusData?.state ? statusData.state.replace('_', ' ') : (todayData?.attendance_state ? todayData.attendance_state.replace('_', ' ') : 'Pending')}
+              </Text>
+              {statusData?.has_punched_in_today && (
+                <Text style={{ fontSize: 12, color: colors.success, marginTop: 2 }}>Punched In</Text>
+              )}
+            </View>
+            <View style={{ alignItems: 'flex-end', marginRight: 10 }}>
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>Hours Worked</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, marginTop: 4 }}>
+                {getSafeHours(todayData?.hours_today).toFixed(2)} hrs
+              </Text>
+              {statusData?.has_punched_out_today && (
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Punched Out</Text>
+              )}
+            </View>
+            <Icon
+              name={showStatusDetails ? "chevron-up" : "chevron-down"}
+              size={22}
+              color={colors.textSecondary}
+            />
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 13, color: colors.textSecondary }}>Hours Worked</Text>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, marginTop: 4 }}>
-              {getSafeHours(todayData?.hours_today).toFixed(2)} hrs
-            </Text>
-            {statusData?.has_punched_out_today && (
-              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Punched Out</Text>
-            )}
-          </View>
-        </View>
+
+          {showStatusDetails && (
+            <View style={styles.expandedDetailsContainer}>
+              <Text style={styles.monthlyStatusTitle}>Monthly Status</Text>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Total Hours</Text>
+                  <Text style={styles.detailValue}>{(summaryData?.summary?.worked_hours || 0).toFixed(2)} hrs</Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Total Days</Text>
+                  <Text style={styles.detailValue}>{summaryData?.summary?.total_days || 0}</Text>
+                </View>
+              </View>
+              <View style={[styles.detailRow, { marginBottom: 0 }]}>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Calculated Days</Text>
+                  <Text style={styles.detailValue}>{summaryData?.summary?.calculated_days || 0}</Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Remaining Days</Text>
+                  <Text style={styles.detailValue}>{summaryData?.summary?.future_days || 0}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
 
         {/* Month Navigator */}
         <View style={styles.monthNavContainer}>
@@ -251,7 +321,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
         {/* Monthly Summary */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryTile, { backgroundColor: colors.successBg }]}>
-            <Text style={[styles.summaryValue, { color: colors.successText }]}>{(summaryData?.summary?.present || 0) + (summaryData?.summary?.half_day || 0)}</Text>
+            <Text style={[styles.summaryValue, { color: colors.successText }]}>{summaryData?.summary?.present || 0}</Text>
             <Text style={[styles.summaryLabel, { color: colors.successText }]}>Present</Text>
           </View>
           <View style={[styles.summaryTile, { backgroundColor: colors.dangerBg }]}>
@@ -262,10 +332,26 @@ export const AttendanceScreen = ({ navigation }: any) => {
             <Text style={[styles.summaryValue, { color: colors.warningText }]}>{summaryData?.summary?.leave || 0}</Text>
             <Text style={[styles.summaryLabel, { color: colors.warningText }]}>Leave</Text>
           </View>
+          <View style={[styles.summaryTile, { backgroundColor: '#EBE5FC' }]}>
+            <Text style={[styles.summaryValue, { color: '#653BB5' }]}>{summaryData?.summary?.half_day || 0}</Text>
+            <Text style={[styles.summaryLabel, { color: '#653BB5' }]}>Half Day</Text>
+          </View>
         </View>
 
         {/* Premium Calendar Card */}
         <View style={styles.calendarCard}>
+          {summaryData?.calculation_range && (
+            <View style={styles.calculationRangeContainer}>
+              <View style={styles.calculationRangeHeader}>
+                <Icon name="calendar-range" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.calculationRangeText}>
+                  {formatDateString(summaryData.calculation_range.from)} - {formatDateString(summaryData.calculation_range.to)}
+                </Text>
+              </View>
+              <View style={styles.halfHr} />
+            </View>
+          )}
+
           <View style={styles.dayHeaders}>
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
               <Text key={idx} style={styles.dayHeaderText}>{day}</Text>
@@ -292,8 +378,8 @@ export const AttendanceScreen = ({ navigation }: any) => {
                   <Icon name="chevron-left" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.pickerYearText}>{pickerYear}</Text>
-                <TouchableOpacity 
-                  onPress={() => setPickerYear(y => y + 1)} 
+                <TouchableOpacity
+                  onPress={() => setPickerYear(y => y + 1)}
                   style={[styles.pickerNavBtn, pickerYear >= currentMonthDate.getFullYear() && { opacity: 0.5 }]}
                   disabled={pickerYear >= currentMonthDate.getFullYear()}
                 >
@@ -309,7 +395,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
                     <TouchableOpacity
                       key={idx}
                       style={[
-                        styles.monthCell, 
+                        styles.monthCell,
                         isSelected && styles.monthCellSelected,
                         isFuture && { opacity: 0.3 }
                       ]}
@@ -337,15 +423,28 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
             {/* Premium List Container */}
             <View style={styles.listContainer}>
-              {historyData?.records?.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0)
+              {historyData?.records?.filter((r: any) => r.date <= todayStr)
+                .slice()
                 .reverse()
                 .slice(0, 5)
                 .map((item: any, idx: number) => {
                   const attendance = item.attendances?.[0];
                   const leave = item.leave_requests?.[0];
-                  let badgeStatus = item.status === 'leave' ? 'leave' : 'present';
-                  let iconName = item.status === 'leave' ? 'calendar-minus' : 'check-circle-outline';
-                  let iconColor = item.status === 'leave' ? colors.warning : colors.success;
+
+                  let badgeStatus = item.status || 'present';
+                  let iconName = 'check-circle-outline';
+                  let iconColor = colors.success;
+
+                  if (badgeStatus === 'leave') {
+                    iconName = 'calendar-minus';
+                    iconColor = colors.warning;
+                  } else if (badgeStatus === 'absent') {
+                    iconName = 'close-circle-outline';
+                    iconColor = colors.danger;
+                  } else if (badgeStatus === 'half_day') {
+                    iconName = 'clock-outline';
+                    iconColor = '#7C54D1';
+                  }
 
                   return (
                     <TouchableOpacity
@@ -353,7 +452,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
                       style={styles.listCard}
                       activeOpacity={0.8}
                       onPress={() => {
-                        if (badgeStatus === 'present') {
+                        if ((badgeStatus === 'present' || badgeStatus === 'half_day') && user?.track_live_location !== false) {
                           navigation.navigate('RouteDetailScreen', { date: item.date });
                         }
                       }}
@@ -387,7 +486,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                   )
                 })}
-              {(!historyData?.records || historyData.records.filter((r: any) => r.attendances?.length > 0 || r.leave_requests?.length > 0).length === 0) && (
+              {(!historyData?.records || historyData.records.filter((r: any) => r.date <= todayStr).length === 0) && (
                 <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No recent logs found.</Text>
               )}
             </View>
@@ -471,6 +570,62 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     shadowRadius: 16,
     elevation: 5,
   },
+  calculationRangeContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  expandedDetailsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  monthlyStatusTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  detailItem: {
+    width: '48%',
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  calculationRangeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calculationRangeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  halfHr: {
+    height: 1.5,
+    backgroundColor: colors.border,
+    width: '94%',
+    alignSelf: 'center',
+    marginTop: 10,
+    borderRadius: 1,
+    opacity: 0.5,
+  },
   dayHeaders: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -526,6 +681,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.warningText,
     fontWeight: '600',
   },
+  halfDayCell: {
+    backgroundColor: '#EBE5FC',
+  },
+  halfDayText: {
+    color: '#653BB5',
+    fontWeight: '600',
+  },
   todayCell: {
     backgroundColor: colors.bgPage,
     borderWidth: 1.5,
@@ -542,6 +704,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: colors.primary,
+  },
+  futureCell: {
+    opacity: 0.35,
+  },
+  futureText: {
+    color: colors.textSecondary,
   },
   sectionTitle: {
     fontSize: 16,
@@ -664,7 +832,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 16,
   },
   summaryTile: {
-    width: '31%',
+    width: '23%',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

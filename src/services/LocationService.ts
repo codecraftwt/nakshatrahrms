@@ -1,6 +1,6 @@
 import Geolocation from 'react-native-geolocation-service';
 import BackgroundService from 'react-native-background-actions';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
@@ -44,6 +44,64 @@ let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
 let consecutiveSpeedRejects = 0;
 let isTrackingStopped = false; // guard against callbacks firing after stopTracking
 let lastLocationCallbackTime = 0; // watchdog timer to detect watchPosition stalls
+
+// ─── Kalman Filter State & Helpers ───────────────────────────────────────────
+let kalmanLat = 0;
+let kalmanLng = 0;
+let kalmanVariance = -1; // -1 means uninitialized
+let kalmanLastTimestamp = 0;
+
+const resetKalmanFilter = (): void => {
+  kalmanVariance = -1;
+  kalmanLat = 0;
+  kalmanLng = 0;
+  kalmanLastTimestamp = 0;
+};
+
+/**
+ * Applies a 2D Kalman Filter to smooth GPS coordinates.
+ * qMetresPerSecond represents process noise (how fast coordinates can change).
+ * minAccuracy represents measurement noise floor (standard deviation floor in meters).
+ */
+const applyKalmanFilter = (
+  lat: number,
+  lng: number,
+  accuracy: number,
+  timestampMs: number,
+  qMetresPerSecond: number = 3.0,
+  minAccuracy: number = 1.0
+): { latitude: number; longitude: number } => {
+  const r = Math.max(accuracy, minAccuracy) * Math.max(accuracy, minAccuracy);
+
+  if (kalmanVariance < 0) {
+    kalmanVariance = r;
+    kalmanLat = lat;
+    kalmanLng = lng;
+    kalmanLastTimestamp = timestampMs;
+    return { latitude: lat, longitude: lng };
+  }
+
+  const dt = (timestampMs - kalmanLastTimestamp) / 1000.0;
+  kalmanLastTimestamp = timestampMs;
+
+  if (dt > 0) {
+    // Increase estimated uncertainty based on elapsed time and process noise
+    kalmanVariance += dt * qMetresPerSecond * qMetresPerSecond;
+  }
+
+  // Kalman Gain: K = uncertainty / (uncertainty + measurement_noise)
+  const k = kalmanVariance / (kalmanVariance + r);
+
+  // Update estimate
+  kalmanLat += k * (lat - kalmanLat);
+  kalmanLng += k * (lng - kalmanLng);
+
+  // Update uncertainty
+  kalmanVariance = (1.0 - k) * kalmanVariance;
+
+  return { latitude: kalmanLat, longitude: kalmanLng };
+};
+
 
 // ─── Haversine distance (metres) ──────────────────────────────────────────────
 /**
@@ -116,6 +174,20 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
     );
     return;
   }
+
+  // 1.5 Apply Kalman Filter to smooth out coords and reduce stationary drift
+  const currentAccuracy = position.coords.accuracy ?? 30.0;
+  const filtered = applyKalmanFilter(
+    position.coords.latitude,
+    position.coords.longitude,
+    currentAccuracy,
+    position.timestamp
+  );
+
+  // Overwrite coordinates with smoothed values for distance & speed checks
+  position.coords.latitude = filtered.latitude;
+  position.coords.longitude = filtered.longitude;
+
 
   if (lastRecordedPoint) {
     const dist = haversineDistance(lastRecordedPoint, position.coords);
@@ -537,6 +609,38 @@ export const LocationService = {
       }
     }
 
+    // Android: Battery Optimization check
+    if (Platform.OS === 'android') {
+      try {
+        const isOptimized = await (BackgroundService as any).checkBatteryOptimization();
+        if (isOptimized === true || isOptimized === 'true') {
+          await new Promise<void>((resolve) => {
+            Alert.alert(
+              'Disable Battery Optimization',
+              'Battery optimization is enabled. Android may kill tracking in the background. Please select "Battery" -> "Unrestricted" in the settings page to prevent tracking issues.',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => resolve(),
+                },
+                {
+                  text: 'Open Settings',
+                  onPress: () => {
+                    Linking.openSettings();
+                    resolve();
+                  },
+                },
+              ],
+              { cancelable: true }
+            );
+          });
+        }
+      } catch (error) {
+        console.warn('[LocationService] Failed to check battery optimization:', error);
+      }
+    }
+
     return true;
   },
 
@@ -559,6 +663,8 @@ export const LocationService = {
     consecutiveSpeedRejects = 0;
     isTrackingStopped = false;
     lastLocationCallbackTime = Date.now();
+    resetKalmanFilter();
+
 
     // ── iOS ────────────────────────────────────────────────────────────────
     if (Platform.OS === 'ios') {
@@ -615,6 +721,8 @@ export const LocationService = {
     lastRecordedPoint = null;
     consecutiveSpeedRejects = 0;
     lastLocationCallbackTime = 0;
+    resetKalmanFilter();
+
 
     if (Platform.OS === 'ios') {
       if (iosWatchId !== null) {

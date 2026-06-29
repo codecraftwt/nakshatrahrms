@@ -31,7 +31,7 @@ const statusColors = {
   success:      '#1D9E75',
   successBg:    '#D0EDDF',
   successText:  '#0F6E56',
-  warning:      '#BA7517',
+  warning:      '#ba3217',
   warningBg:    '#FAEEDA',
   warningText:  '#854F0B',
   danger:       '#A32D2D',

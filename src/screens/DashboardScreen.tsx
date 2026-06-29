@@ -44,6 +44,20 @@ export const DashboardScreen = ({ navigation }: any) => {
     return hours;
   };
 
+  const getGreeting = () => {
+  const hour = new Date().getHours();
+  
+  if (hour >= 5 && hour < 12) {
+    return 'Good morning';
+  } else if (hour >= 12 && hour < 17) {
+    return 'Good afternoon';
+  } else if (hour >= 17 && hour < 21) {
+    return 'Good evening';
+  } else {
+    return 'Good night';
+  }
+};
+
   useFocusEffect(
     useCallback(() => {
       dispatch(fetchDashboardSummary());
@@ -60,6 +74,7 @@ export const DashboardScreen = ({ navigation }: any) => {
       dispatch(fetchKmSummary('today,month'));
     }, [dispatch])
   );
+  
 
   React.useEffect(() => {
     Animated.loop(
@@ -92,7 +107,10 @@ export const DashboardScreen = ({ navigation }: any) => {
       {/* Premium Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Good morning, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}</Text>
+          {/* <Text style={styles.greeting}>Good morning, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}</Text> */}
+          <Text style={styles.greeting}>
+  {getGreeting()}, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}
+</Text>
           <Text style={styles.subGreeting}>{dashboardData?.employee?.designation || 'Employee'} · {dashboardData?.employee?.employee_code || ''}</Text>
         </View>
         <TouchableOpacity 
@@ -167,10 +185,10 @@ export const DashboardScreen = ({ navigation }: any) => {
           </View>
         )}
 
-        <View style={styles.metricRow}>
+        {/* <View style={styles.metricRow}>
           <MetricTile label="Present" value="0" subtext="this month" />
           <MetricTile label="Leave Balance" value="0" subtext="days left" />
-        </View>
+        </View> */}
 
         <Text style={styles.sectionTitle}>Shift Details</Text>
 

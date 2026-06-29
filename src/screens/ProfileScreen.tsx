@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Image, Alert, M
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 import { AppText as Text } from '../components/AppText';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -39,7 +40,14 @@ export const ProfileScreen = ({ navigation }: any) => {
     }, [dispatch])
   );
 
-  const handleLogout = async () => {
+  const [isLogoutModalVisible, setIsLogoutModalVisible] = React.useState(false);
+
+  const handleLogout = () => {
+    setIsLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setIsLogoutModalVisible(false);
     await dispatch(logoutCandidate());
     navigation.replace('LoginScreen');
   };
@@ -282,6 +290,18 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Sign Out Confirmation Modal */}
+      <CustomAlertModal
+        visible={isLogoutModalVisible}
+        title="Sign Out"
+        message="Are you sure you want to sign out?"
+        type="error"
+        primaryButtonText="Sign Out"
+        onPrimaryPress={confirmLogout}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setIsLogoutModalVisible(false)}
+      />
     </View>
   );
 };

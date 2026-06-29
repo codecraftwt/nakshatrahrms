@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { AppText as Text } from '../components/AppText';
 
@@ -16,6 +16,7 @@ import { ActivityIndicator } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { postPunchOut } from '../redux/slice/attendanceSlice';
+import { fetchLiveKm, fetchKmSummary } from '../redux/slice/trackingSlice';
 import Geolocation from 'react-native-geolocation-service';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { usePipMode } from '../hooks/usePipMode';
@@ -28,9 +29,49 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
   const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    dispatch(fetchLiveKm());
+    dispatch(fetchKmSummary('today,month'));
+
+    const interval = setInterval(() => {
+      dispatch(fetchLiveKm());
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [dispatch]);
   const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
   const [outRemarks, setOutRemarks] = React.useState('');
+  const [selfieUri, setSelfieUri] = React.useState<string | null>(null);
+  const [selfieBase64, setSelfieBase64] = React.useState<string | null>(null);
+
+  const takeSelfie = async () => {
+    try {
+      const options: CameraOptions = {
+        mediaType: 'photo',
+        saveToPhotos: false,
+        cameraType: 'front',
+        quality: 0.5,
+        maxWidth: 500,
+        maxHeight: 500,
+        includeBase64: true,
+      };
+
+      const result = await launchCamera(options);
+      if (result.didCancel) return;
+      if (result.errorCode || !result.assets || result.assets.length === 0) {
+        showAlert('Error', 'Failed to capture selfie.');
+        return;
+      }
+
+      setSelfieUri(result.assets[0].uri || null);
+      setSelfieBase64(result.assets[0].base64 || null);
+    } catch (err) {
+      showAlert('Error', 'Failed to capture selfie.');
+    }
+  };
   const [alertConfig, setAlertConfig] = React.useState<{
     visible: boolean;
     title: string;
@@ -103,32 +144,69 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const handlePunchOut = async () => {
     setLoading(true);
     try {
-      const options: CameraOptions = {
-        mediaType: 'photo',
-        saveToPhotos: false,
-        cameraType: 'front',
-        quality: 0.5,
-        maxWidth: 500,
-        maxHeight: 500,
-        includeBase64: true,
-      };
+      let base64Selfie = selfieBase64;
 
-      const result = await launchCamera(options);
-      if (result.didCancel) {
-        setLoading(false);
-        return;
-      }
-      if (result.errorCode || !result.assets || result.assets.length === 0) {
-        showAlert('Error', 'Failed to capture selfie for punch out.');
-        setLoading(false);
-        return;
-      }
+      if (user?.track_live_location === false) {
+        if (!base64Selfie) {
+          const options: CameraOptions = {
+            mediaType: 'photo',
+            saveToPhotos: false,
+            cameraType: 'front',
+            quality: 0.5,
+            maxWidth: 500,
+            maxHeight: 500,
+            includeBase64: true,
+          };
 
-      const base64Selfie = result.assets[0].base64;
-      if (!base64Selfie) {
-        showAlert('Error', 'Failed to read image data.');
-        setLoading(false);
-        return;
+          const result = await launchCamera(options);
+          if (result.didCancel) {
+            setLoading(false);
+            return;
+          }
+          if (result.errorCode || !result.assets || result.assets.length === 0) {
+            showAlert('Error', 'Failed to capture selfie for punch out.');
+            setLoading(false);
+            return;
+          }
+
+          base64Selfie = result.assets[0].base64 || null;
+          if (!base64Selfie) {
+            showAlert('Error', 'Failed to read image data.');
+            setLoading(false);
+            return;
+          }
+
+          setSelfieUri(result.assets[0].uri || null);
+          setSelfieBase64(base64Selfie);
+        }
+      } else {
+        const options: CameraOptions = {
+          mediaType: 'photo',
+          saveToPhotos: false,
+          cameraType: 'front',
+          quality: 0.5,
+          maxWidth: 500,
+          maxHeight: 500,
+          includeBase64: true,
+        };
+
+        const result = await launchCamera(options);
+        if (result.didCancel) {
+          setLoading(false);
+          return;
+        }
+        if (result.errorCode || !result.assets || result.assets.length === 0) {
+          showAlert('Error', 'Failed to capture selfie for punch out.');
+          setLoading(false);
+          return;
+        }
+
+        base64Selfie = result.assets[0].base64 || null;
+        if (!base64Selfie) {
+          showAlert('Error', 'Failed to read image data.');
+          setLoading(false);
+          return;
+        }
       }
 
       try {
@@ -217,33 +295,60 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         )}
       </View>
 
-      <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={20}>
-        <View style={styles.mapBox}>
-          {currentLocation ? (
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={{ width: '100%', height: '100%', borderRadius: 12 }}
-              initialRegion={{
-                latitude: currentLocation.lat,
-                longitude: currentLocation.lng,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-            >
-              <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
-            </MapView>
-          ) : (
-            <ActivityIndicator size="large" color={colors.primary} />
-          )}
-          
-          <View style={styles.gpsActiveOverlay}>
-            <View style={styles.greenDot} />
-            <Text style={styles.gpsText}>GPS active</Text>
+      <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={true} enableOnAndroid={true} extraScrollHeight={20}>
+        {user?.track_live_location !== false ? (
+          <View style={styles.mapBox}>
+            {currentLocation ? (
+              <MapView
+                provider={PROVIDER_GOOGLE}
+                style={{ width: '100%', height: '100%', borderRadius: 12 }}
+                initialRegion={{
+                  latitude: currentLocation.lat,
+                  longitude: currentLocation.lng,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+              >
+                <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
+              </MapView>
+            ) : (
+              <ActivityIndicator size="large" color={colors.primary} />
+            )}
+            
+            <View style={styles.gpsActiveOverlay}>
+              <View style={styles.greenDot} />
+              <Text style={styles.gpsText}>GPS active</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.cameraContainer}>
+            <TouchableOpacity style={styles.cameraBox} onPress={takeSelfie} activeOpacity={0.8}>
+              {selfieUri ? (
+                <Image source={{ uri: selfieUri }} style={styles.cameraImage} />
+              ) : (
+                <>
+                  <View style={styles.iconCircleLarge}>
+                    <Icon name="face-recognition" size={40} color={colors.primary} />
+                  </View>
+                  <Text style={styles.cameraInstruction}>Tap to capture selfie</Text>
+                  <Text style={styles.cameraPreviewText}>Required for punch out</Text>
+                </>
+              )}
+
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.metricRow}>
-          <MetricTile label="Distance today" value="0.0" unit="km" />
+          <MetricTile 
+            label="Distance today" 
+            value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
+            unit="km" 
+          />
           <MetricTile label="Time elapsed" value="Tracking..." subtext="since punch in" />
         </View>
 
@@ -334,7 +439,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     flexGrow: 1,
   },
   mapBox: {
-    height: 450,
+    height: 280,
     backgroundColor: colors.bgSurface,
     borderRadius: 12,
     justifyContent: 'center',
@@ -444,5 +549,79 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   punchOutBtn: {
     marginTop: 'auto',
+  },
+  cameraContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cameraBox: {
+    width: '100%',
+    aspectRatio: 1.6,
+    backgroundColor: colors.bgSurface,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cameraImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  corner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: colors.primary,
+  },
+  topLeft: {
+    top: 8,
+    left: 8,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderTopLeftRadius: 6,
+  },
+  topRight: {
+    top: 8,
+    right: 8,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderTopRightRadius: 6,
+  },
+  bottomLeft: {
+    bottom: 8,
+    left: 8,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderBottomLeftRadius: 6,
+  },
+  bottomRight: {
+    bottom: 8,
+    right: 8,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderBottomRightRadius: 6,
+  },
+  iconCircleLarge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(21, 88, 176, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cameraInstruction: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  cameraPreviewText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
 });
