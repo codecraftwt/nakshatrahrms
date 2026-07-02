@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Animated } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Animated, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppText as Text } from '../components/AppText';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -29,6 +30,7 @@ export const DashboardScreen = ({ navigation }: any) => {
   const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
   const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
   const { user } = useSelector((state: RootState) => state.auth);
+  const [exitModalVisible, setExitModalVisible] = React.useState(false);
 
   const formatTime = (time: number | undefined) => {
     if (time === undefined || time === null) return '';
@@ -72,6 +74,18 @@ export const DashboardScreen = ({ navigation }: any) => {
       
       // Fetch KM Summary for the dashboard metric tiles
       dispatch(fetchKmSummary('today,month'));
+
+      const backAction = () => {
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        backAction,
+      );
+
+      return () => backHandler.remove();
     }, [dispatch])
   );
   
@@ -101,6 +115,13 @@ export const DashboardScreen = ({ navigation }: any) => {
       );
     }
   }, [dashboardData?.attendance_state, user?.track_live_location]);
+
+  // Sync any remaining offline data on component mount
+  React.useEffect(() => {
+    LocationService.syncOfflineQueue().catch((err) =>
+      console.warn('Dashboard: Failed to sync remaining offline queue:', err)
+    );
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -228,6 +249,17 @@ export const DashboardScreen = ({ navigation }: any) => {
         
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <CustomAlertModal
+        visible={exitModalVisible}
+        title="Exit App"
+        message="Do you really want to close this app?"
+        type="warning"
+        primaryButtonText="Exit"
+        onPrimaryPress={() => BackHandler.exitApp()}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setExitModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };

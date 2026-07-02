@@ -1,10 +1,11 @@
 import Geolocation from 'react-native-geolocation-service';
 import BackgroundService from 'react-native-background-actions';
 import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import api from '../api/axiosInstance';
+import { Q } from '@nozbe/watermelondb';
+import { database, LocationPoint } from '../database';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const OFFLINE_QUEUE_KEY          = 'offlineLocations';
@@ -44,6 +45,7 @@ let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
 let consecutiveSpeedRejects = 0;
 let isTrackingStopped = false; // guard against callbacks firing after stopTracking
 let lastLocationCallbackTime = 0; // watchdog timer to detect watchPosition stalls
+let lastSyncAttemptTime = 0;
 
 // ─── Kalman Filter State & Helpers ───────────────────────────────────────────
 let kalmanLat = 0;
@@ -127,24 +129,6 @@ const haversineDistance = (
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-const readQueue = async (): Promise<LocationPayload[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[LocationService] readQueue error:', e);
-    return [];
-  }
-};
-
-const writeQueue = async (queue: LocationPayload[]): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-  } catch (e) {
-    console.warn('[LocationService] writeQueue error:', e);
-  }
-};
 
 // ─── Shared location handler (used by BOTH platforms) ────────────────────────
 /**
@@ -239,23 +223,36 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
     time: position.timestamp,
   };
 
-  const payload: LocationPayload = {
-    id: uuidv4(),
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
-    datetime: new Date(position.timestamp).toISOString(),
-  };
+  try {
+    const locationPointsCollection = database.collections.get<LocationPoint>('location_points');
 
-  const queue = await readQueue();
+    // Cap queue size — drop oldest when full
+    const count = await locationPointsCollection.query().fetchCount();
+    if (count >= MAX_QUEUE_SIZE) {
+      console.warn('[LocationService] Queue full — dropping oldest point');
+      const oldestPoints = await locationPointsCollection.query(
+        Q.sortBy('created_at', Q.asc),
+        Q.take(1)
+      ).fetch();
+      if (oldestPoints.length > 0) {
+        await database.write(async () => {
+          await oldestPoints[0].destroyPermanently();
+        });
+      }
+    }
 
-  // Cap queue size — drop oldest when full
-  if (queue.length >= MAX_QUEUE_SIZE) {
-    console.warn('[LocationService] Queue full — dropping oldest point');
-    queue.shift();
+    // Save coordinate to SQLite via WatermelonDB
+    await database.write(async () => {
+      await locationPointsCollection.create((point) => {
+        point.latitude = position.coords.latitude;
+        point.longitude = position.coords.longitude;
+        point.datetime = new Date(position.timestamp).toISOString();
+      });
+    });
+    console.log('[LocationService] Saved coordinate to WatermelonDB:', position.coords.latitude, position.coords.longitude);
+  } catch (dbError) {
+    console.warn('[LocationService] Database write error:', dbError);
   }
-
-  queue.push(payload);
-  await writeQueue(queue);
 
   // Fire-and-forget — explicit catch so failures never kill the caller's loop
   processQueue().catch((e) =>
@@ -282,12 +279,17 @@ const processQueue = async (): Promise<void> => {
   isProcessingQueue = true;
 
   try {
+    const locationPointsCollection = database.collections.get<LocationPoint>('location_points');
     let continueProcessing = true;
 
     while (continueProcessing) {
-      const queue = await readQueue();
-      if (queue.length === 0) break;
+      const queue = await locationPointsCollection.query(Q.sortBy('created_at', Q.asc)).fetch();
+      if (queue.length === 0) {
+        console.log('[LocationService] Offline queue is empty. Nothing to sync.');
+        break;
+      }
 
+      console.log(`[LocationService] Starting sync for ${queue.length} offline coordinates...`);
       let networkFailed = false;
       const processedIds = new Set<string>();
 
@@ -298,6 +300,7 @@ const processQueue = async (): Promise<void> => {
             longitude: item.longitude,
             datetime: item.datetime,
           });
+          console.log('[LocationService] Successfully synced location coordinate:', item.latitude, item.longitude, 'at', item.datetime);
           processedIds.add(item.id);
         } catch (error: any) {
           if (
@@ -325,25 +328,35 @@ const processQueue = async (): Promise<void> => {
 
         // Batch flush every BATCH_WRITE_SIZE to keep memory and I/O low
         if (processedIds.size >= BATCH_WRITE_SIZE) {
-          const latest = await readQueue();
-          await writeQueue(latest.filter((i) => !processedIds.has(i.id)));
+          const idsToFlush = new Set(processedIds);
           processedIds.clear();
+          await database.write(async () => {
+            const pointsToDestroy = queue.filter((p) => idsToFlush.has(p.id));
+            await database.batch(
+              ...pointsToDestroy.map((p) => p.prepareDestroyPermanently())
+            );
+          });
         }
       }
 
       // Final flush for the tail of this pass
       if (processedIds.size > 0) {
-        const latest = await readQueue();
-        await writeQueue(latest.filter((i) => !processedIds.has(i.id)));
+        const idsToFlush = new Set(processedIds);
         processedIds.clear();
+        await database.write(async () => {
+          const pointsToDestroy = queue.filter((p) => idsToFlush.has(p.id));
+          await database.batch(
+            ...pointsToDestroy.map((p) => p.prepareDestroyPermanently())
+          );
+        });
       }
 
       if (networkFailed) {
         continueProcessing = false;
       } else {
         // Race condition fix: check for items added during this pass
-        const remaining = await readQueue();
-        continueProcessing = remaining.length > 0;
+        const remainingCount = await locationPointsCollection.query().fetchCount();
+        continueProcessing = remainingCount > 0;
       }
     }
   } catch (e) {
@@ -389,7 +402,6 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
       distanceFilter: 0,           // FIX: 0 ensures the OS doesn't throttle updates based on distance while in Doze mode
       interval: 10000,             // Relaxed from 4000ms to 10s (better for battery, still frequent enough)
       fastestInterval: 5000,
-      maximumAge: 0,               // no stale cached positions
       showLocationDialog: false,   // don't prompt to enable GPS (already handled)
       forceRequestLocation: true,  // FIX: Forces FusedLocationProvider to actively fetch location in background
     },
@@ -401,6 +413,16 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
   // By sleeping, we keep the JS thread alive and the Foreground Service's
   // partial wakelock active. We periodically check if watchPosition has stalled.
   while (BackgroundService.isRunning()) {
+    // Periodically trigger sync in background (every 60 seconds)
+    const nowTime = Date.now();
+    if (nowTime - lastSyncAttemptTime > 60000) {
+      lastSyncAttemptTime = nowTime;
+      console.log('[LocationService] Running periodic background offline queue sync...');
+      processQueue().catch((e) =>
+        console.warn('[LocationService] Periodic background sync error:', e)
+      );
+    }
+
     await sleep(delay);
 
     // Fallback: if watchPosition goes completely silent for > 60 seconds, try to kickstart it
@@ -456,7 +478,7 @@ const serviceOptions = {
   taskIcon: { name: 'ic_launcher', type: 'mipmap' },
   color: '#ff00ff',
   parameters: { delay: TRACKING_DELAY_MS },
-  foregroundServiceType: ['location'],
+  foregroundServiceType: ['location'] as const,
   // NOTE: AndroidManifest.xml must also declare:
   //   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
   //   <service android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask"
@@ -575,7 +597,8 @@ export const LocationService = {
     }
 
     // Android 10+ (API 29+): background location = separate dialog
-    if (Platform.Version >= 29) {
+    const apiLevel = typeof Platform.Version === 'string' ? parseInt(Platform.Version, 10) : Platform.Version;
+    if (apiLevel >= 29) {
       const bgResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
         {
@@ -597,7 +620,7 @@ export const LocationService = {
     }
 
     // Android 13+ (API 33+): notification permission for the foreground service banner
-    if (Platform.Version >= 33) {
+    if (apiLevel >= 33) {
       const notifResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
       );
@@ -663,7 +686,14 @@ export const LocationService = {
     consecutiveSpeedRejects = 0;
     isTrackingStopped = false;
     lastLocationCallbackTime = Date.now();
+    lastSyncAttemptTime = Date.now();
     resetKalmanFilter();
+
+    // Trigger sync of any existing offline points immediately when tracking starts
+    console.log('[LocationService] startTracking: Triggering immediate offline queue sync...');
+    processQueue().catch((e) =>
+      console.warn('[LocationService] processQueue error during startTracking:', e)
+    );
 
 
     // ── iOS ────────────────────────────────────────────────────────────────
@@ -745,7 +775,7 @@ export const LocationService = {
     try {
       // Small delay to ensure Geolocation.clearWatch completes natively 
       // before we forcefully destroy the Android Service context.
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
       await BackgroundService.stop();
       console.log('[LocationService] Android: foreground service stopped');
     } catch (e) {
@@ -762,14 +792,36 @@ export const LocationService = {
   // ── getPendingQueueSize ───────────────────────────────────────────────────
   /** How many points are sitting in the offline queue awaiting upload. */
   getPendingQueueSize: async (): Promise<number> => {
-    const queue = await readQueue();
-    return queue.length;
+    try {
+      const locationPointsCollection = database.collections.get<LocationPoint>('location_points');
+      return await locationPointsCollection.query().fetchCount();
+    } catch (e) {
+      console.warn('[LocationService] getPendingQueueSize error:', e);
+      return 0;
+    }
   },
 
   // ── clearQueue ────────────────────────────────────────────────────────────
   /** Wipe the queue — call on logout so stale data is never sent. */
   clearQueue: async (): Promise<void> => {
-    await writeQueue([]);
-    console.log('[LocationService] Offline queue cleared');
+    try {
+      const locationPointsCollection = database.collections.get<LocationPoint>('location_points');
+      const allPoints = await locationPointsCollection.query().fetch();
+      await database.write(async () => {
+        await database.batch(
+          ...allPoints.map(p => p.prepareDestroyPermanently())
+        );
+      });
+      console.log('[LocationService] Offline queue cleared');
+    } catch (e) {
+      console.warn('[LocationService] clearQueue error:', e);
+    }
+  },
+
+  // ── syncOfflineQueue ───────────────────────────────────────────────────────
+  /** Trigger manual upload of any offline data remaining in database. */
+  syncOfflineQueue: async (): Promise<void> => {
+    console.log('[LocationService] Manual offline queue sync triggered.');
+    await processQueue();
   },
 };
