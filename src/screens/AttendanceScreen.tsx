@@ -176,9 +176,12 @@ export const AttendanceScreen = ({ navigation }: any) => {
             status === 'half_day' && styles.halfDayCell,
             isFuture && styles.futureCell
           ]}
-          disabled={isFuture}
+          disabled={isFuture || (isToday && status !== 'present' && status !== 'half_day')}
           onPress={() => {
             if (user?.track_live_location !== false) {
+              if (isToday && status !== 'present' && status !== 'half_day') {
+                return;
+              }
               navigation.navigate('RouteDetailScreen', { date: dateStr });
             }
           }}
@@ -423,7 +426,12 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
             {/* Premium List Container */}
             <View style={styles.listContainer}>
-              {historyData?.records?.filter((r: any) => r.date <= todayStr)
+              {historyData?.records?.filter((r: any) => {
+                if (r.date === todayStr) {
+                  return r.attendances && r.attendances.length > 0;
+                }
+                return r.date < todayStr;
+              })
                 .slice()
                 .reverse()
                 .slice(0, 5)

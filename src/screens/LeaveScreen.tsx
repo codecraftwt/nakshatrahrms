@@ -12,6 +12,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import { fetchLeaveBalances, fetchLeaveRequests } from '../redux/slice/leaveSlice';
 import { RootState, AppDispatch } from '../redux/store';
 
+const parseDate = (dateStr: string) => {
+  if (!dateStr) return { month: 'JAN', day: '01' };
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const monthNum = parseInt(parts[1], 10);
+      const day = parts[2].padStart(2, '0');
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      if (monthNum >= 1 && monthNum <= 12) {
+        return { month: months[monthNum - 1], day };
+      }
+    }
+  } catch {}
+  return { month: 'JAN', day: '01' };
+};
+
 export const LeaveScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
@@ -47,9 +63,17 @@ export const LeaveScreen = ({ navigation }: any) => {
         >
           {balanceData?.balances?.map((balance: any, idx: number) => (
             <View key={idx} style={styles.horizontalCard}>
-              <View style={styles.hCardValueRow}>
-                <Text style={styles.hCardValue}>{balance.virtual_remaining_leaves || 0}</Text>
-                <Text style={styles.hCardUnit}>{balance.request_unit === 'hour' ? 'hrs' : 'days'}</Text>
+              <View style={styles.spiralsContainer}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <View key={i} style={styles.spiralRing} />
+                ))}
+              </View>
+              <View style={styles.hCardTopRow}>
+                <View style={styles.hCardValueRow}>
+                  <Text style={styles.hCardValue}>{balance.virtual_remaining_leaves || 0}</Text>
+                  <Text style={styles.hCardUnit}>{balance.request_unit === 'hour' ? 'hrs' : 'days'}</Text>
+                </View>
+                <Icon name="clipboard-check-outline" size={24} color="#4CAF50" />
               </View>
               <Text style={styles.hCardLabel} numberOfLines={2}>{balance.name}</Text>
             </View>
@@ -78,13 +102,19 @@ export const LeaveScreen = ({ navigation }: any) => {
               activeOpacity={0.8}
               onPress={() => navigation.navigate('LeaveDetailScreen', { id: item.id })}
             >
-              <View style={styles.listIconBox}>
-                <Icon 
-                  name={item.leave_type?.name?.includes('Sick') ? 'medical-bag' : 'calendar-text-outline'} 
-                  size={24} 
-                  color={colors.primary} 
-                />
-              </View>
+              {(() => {
+                const { month, day } = parseDate(item.from);
+                return (
+                  <View style={styles.calendarSheet}>
+                    <View style={styles.calendarSheetHeader}>
+                      <Text style={styles.calendarSheetMonth}>{month}</Text>
+                    </View>
+                    <View style={styles.calendarSheetBody}>
+                      <Text style={styles.calendarSheetDay}>{day}</Text>
+                    </View>
+                  </View>
+                );
+              })()}
               <View style={styles.listTextContainer}>
                 <Text style={styles.itemTitle}>{item.leave_type?.name}</Text>
                 <Text style={styles.itemDate}>{dateText}</Text>
@@ -144,22 +174,52 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   horizontalScrollContent: {
     paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
     gap: 12,
   },
   horizontalCard: {
-    backgroundColor: colors.bgSurface,
+    backgroundColor: '#FFFFFF',
     width: 140,
     height: 110,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
+    paddingTop: 18,
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: 'rgba(21, 88, 176, 0.08)',
-    shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 5,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    borderLeftWidth: 6,
+    borderLeftColor: '#81C784',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    position: 'relative',
+  },
+  spiralsContainer: {
+    position: 'absolute',
+    top: -6,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  spiralRing: {
+    width: 5,
+    height: 12,
+    borderRadius: 2.5,
+    backgroundColor: '#9FB5A2',
+    marginHorizontal: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  hCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
   },
   hCardValueRow: {
     flexDirection: 'row',
@@ -225,6 +285,41 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  calendarSheet: {
+    width: 44,
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.12)',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    marginRight: 12,
+    alignItems: 'stretch',
+  },
+  calendarSheetHeader: {
+    backgroundColor: '#7C92A6',
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarSheetMonth: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  calendarSheetBody: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarSheetDay: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#5A6B7C',
   },
   listTextContainer: {
     flex: 1,

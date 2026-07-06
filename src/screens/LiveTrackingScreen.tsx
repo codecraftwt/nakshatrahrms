@@ -106,8 +106,26 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   }, []);
 
   React.useEffect(() => {
+    // Subscribe to background location updates in real-time
+    const unsubscribe = LocationService.subscribeToLocationUpdates((lat, lng) => {
+      setCurrentLocation({ lat, lng });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  React.useEffect(() => {
     const fetchLocation = async () => {
       try {
+        const gpsEnabled = await LocationService.isLocationServicesEnabled();
+        if (!gpsEnabled) {
+          await LocationService.promptEnableLocationServices();
+          setCurrentLocation({ lat: 16.7908, lng: 74.2816 });
+          return;
+        }
+
         if (Platform.OS === 'android') {
           const granted = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
@@ -247,7 +265,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           <MapView
             provider={PROVIDER_GOOGLE}
             style={{ width: '100%', height: '100%' }}
-            initialRegion={{
+            region={{
               latitude: currentLocation.lat,
               longitude: currentLocation.lng,
               latitudeDelta: 0.005,

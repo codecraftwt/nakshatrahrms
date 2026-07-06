@@ -114,6 +114,14 @@ export const PunchInScreen = ({ navigation }: any) => {
     setLoading(true);
 
     try {
+      // ── Step 0: Pre-check global Location/GPS status ─────────────────────────
+      const gpsEnabled = await LocationService.isLocationServicesEnabled();
+      if (!gpsEnabled) {
+        await LocationService.promptEnableLocationServices();
+        setLoading(false);
+        return;
+      }
+
       // ── Step 1: Request all permissions first ────────────────────────────────
       const hasLocationPermission = await LocationService.requestPermissions();
       if (!hasLocationPermission) {

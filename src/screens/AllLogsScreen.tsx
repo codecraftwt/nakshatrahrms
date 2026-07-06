@@ -20,7 +20,12 @@ export const AllLogsScreen = ({ navigation }: any) => {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
 
-  const logs = historyData?.records?.filter((r: any) => r.date <= todayStr).slice().reverse() || [];
+  const logs = historyData?.records?.filter((r: any) => {
+    if (r.date === todayStr) {
+      return r.attendances && r.attendances.length > 0;
+    }
+    return r.date < todayStr;
+  }).slice().reverse() || [];
 
   return (
     <SafeAreaView style={styles.container}>

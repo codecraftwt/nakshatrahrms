@@ -1,6 +1,6 @@
 import Geolocation from 'react-native-geolocation-service';
 import BackgroundService from 'react-native-background-actions';
-import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
+import { PermissionsAndroid, Platform, Alert, Linking, NativeModules } from 'react-native';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import api from '../api/axiosInstance';
@@ -41,11 +41,27 @@ interface PositionResult {
 let isProcessingQueue = false;
 let iosWatchId: number | null = null;
 let androidWatchId: number | null = null;
+let androidNetworkWatchId: number | null = null;
 let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
 let consecutiveSpeedRejects = 0;
 let isTrackingStopped = false; // guard against callbacks firing after stopTracking
 let lastLocationCallbackTime = 0; // watchdog timer to detect watchPosition stalls
 let lastSyncAttemptTime = 0;
+
+const { PipModule } = NativeModules;
+
+export type LocationListener = (lat: number, lng: number) => void;
+const listeners = new Set<LocationListener>();
+
+const isBBKDevice = Platform.OS === 'android' && 
+  (((Platform.constants as any)?.Brand?.toLowerCase() === 'oneplus' || 
+    (Platform.constants as any)?.Manufacturer?.toLowerCase() === 'oneplus' ||
+    (Platform.constants as any)?.Brand?.toLowerCase() === 'vivo' || 
+    (Platform.constants as any)?.Manufacturer?.toLowerCase() === 'vivo' ||
+    (Platform.constants as any)?.Brand?.toLowerCase() === 'oppo' || 
+    (Platform.constants as any)?.Manufacturer?.toLowerCase() === 'oppo' ||
+    (Platform.constants as any)?.Brand?.toLowerCase() === 'realme' || 
+    (Platform.constants as any)?.Manufacturer?.toLowerCase() === 'realme'));
 
 // ─── Kalman Filter State & Helpers ───────────────────────────────────────────
 let kalmanLat = 0;
@@ -223,6 +239,15 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
     time: position.timestamp,
   };
 
+  // Notify listeners of the new coordinate
+  listeners.forEach((callback) => {
+    try {
+      callback(position.coords.latitude, position.coords.longitude);
+    } catch (err) {
+      console.warn('[LocationService] Listener notification error:', err);
+    }
+  });
+
   try {
     const locationPointsCollection = database.collections.get<LocationPoint>('location_points');
 
@@ -385,7 +410,7 @@ const processQueue = async (): Promise<void> => {
 const trackingTask = async (taskDataArguments: any): Promise<void> => {
   const { delay } = taskDataArguments;
 
-  // 1. Start native watchPosition for accurate movement tracking
+  // 1. Start native watchPosition for accurate movement tracking (GPS)
   androidWatchId = Geolocation.watchPosition(
     async (position) => {
       try {
@@ -404,10 +429,35 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
       fastestInterval: 5000,
       showLocationDialog: false,   // don't prompt to enable GPS (already handled)
       forceRequestLocation: true,  // FIX: Forces FusedLocationProvider to actively fetch location in background
+      forceLocationManager: isBBKDevice, // Bypasses Play Services' background limits on BBK devices
     },
   );
 
-  console.log('[LocationService] Android: watchPosition started, id:', androidWatchId);
+  // 1.5. Start second watchPosition for network-based tracking (cell/Wi-Fi fallback)
+  // This continues to receive updates even when GPS goes to sleep (e.g. screen off)
+  androidNetworkWatchId = Geolocation.watchPosition(
+    async (position) => {
+      try {
+        await handleLocationUpdate(position);
+      } catch (e) {
+        console.warn('[LocationService] Android network watchPosition handler error:', e);
+      }
+    },
+    (error) => {
+      console.warn('[LocationService] Android network watchPosition error:', error);
+    },
+    {
+      enableHighAccuracy: false,  // Force network provider
+      distanceFilter: 0,
+      interval: 15000,             // 15 seconds (battery efficient)
+      fastestInterval: 10000,
+      showLocationDialog: false,
+      forceRequestLocation: true,
+      forceLocationManager: isBBKDevice,
+    },
+  );
+
+  console.log('[LocationService] Android: watchPosition started, id:', androidWatchId, 'networkId:', androidNetworkWatchId);
 
   // 2. Keep-alive loop
   // By sleeping, we keep the JS thread alive and the Foreground Service's
@@ -444,15 +494,36 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
               }
               resolve();
             },
-            (error) => {
-              console.warn('[LocationService] Android fallback getCurrentPosition error:', error);
-              resolve();
+            async (error) => {
+              console.warn('[LocationService] Android fallback getCurrentPosition (high accuracy) error:', error);
+              // Fallback to network/cell-tower location when GPS is unavailable (e.g. screen off)
+              Geolocation.getCurrentPosition(
+                async (lowAccPosition) => {
+                  try {
+                    await handleLocationUpdate(lowAccPosition);
+                  } catch (e) {
+                    console.warn('[LocationService] Android fallback low-accuracy ping error:', e);
+                  }
+                  resolve();
+                },
+                (lowAccError) => {
+                  console.warn('[LocationService] Android fallback getCurrentPosition (low accuracy) error:', lowAccError);
+                  resolve();
+                },
+                {
+                  enableHighAccuracy: false,
+                  timeout: 10000,
+                  maximumAge: 30000,
+                  forceLocationManager: isBBKDevice,
+                }
+              );
             },
             {
               enableHighAccuracy: true,
               timeout: 10000,
               maximumAge: 0,
               forceRequestLocation: true,
+              forceLocationManager: isBBKDevice, // Bypasses Play Services' background limits on OnePlus
             },
           );
         });
@@ -467,6 +538,11 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
     Geolocation.clearWatch(androidWatchId);
     androidWatchId = null;
     console.log('[LocationService] Android: watchPosition cleaned up after service stop');
+  }
+  if (androidNetworkWatchId !== null) {
+    Geolocation.clearWatch(androidNetworkWatchId);
+    androidNetworkWatchId = null;
+    console.log('[LocationService] Android: network watchPosition cleaned up after service stop');
   }
 };
 
@@ -500,7 +576,14 @@ export const LocationService = {
    * misbehaves when either side is null. Both sides now fall back to Infinity
    * so comparisons are always well-defined.
    */
-  getAccurateLocation: (): Promise<PositionResult> => {
+  getAccurateLocation: async (): Promise<PositionResult> => {
+    // Check if Location Services (GPS) are enabled globally
+    const gpsEnabled = await LocationService.isLocationServicesEnabled();
+    if (!gpsEnabled) {
+      await LocationService.promptEnableLocationServices();
+      throw new Error('Location services are disabled.');
+    }
+
     return new Promise((resolve, reject) => {
       let bestPosition: PositionResult | null = null;
       let watchId: number;
@@ -529,7 +612,13 @@ export const LocationService = {
         (error) => {
           console.warn('[LocationService] getAccurateLocation error:', error);
         },
-        { enableHighAccuracy: true, distanceFilter: 0, interval: 1000, fastestInterval: 500 },
+        { 
+          enableHighAccuracy: true, 
+          distanceFilter: 0, 
+          interval: 1000, 
+          fastestInterval: 500,
+          forceLocationManager: isBBKDevice,
+        },
       );
 
       timeoutId = setTimeout(() => {
@@ -542,8 +631,29 @@ export const LocationService = {
           // try a low-accuracy network-based fix instead of failing outright.
           Geolocation.getCurrentPosition(
             (pos) => resolve(pos),
-            () => reject(new Error('Location timeout: unable to get a GPS fix.')),
-            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+            (err) => {
+              console.warn('[LocationService] Fallback getCurrentPosition failed:', err);
+              // Second Fallback: use the last recorded tracking coordinate if available
+              if (lastRecordedPoint) {
+                console.log('[LocationService] getAccurateLocation: Using last recorded tracking point as fallback.');
+                resolve({
+                  coords: {
+                    latitude: lastRecordedPoint.lat,
+                    longitude: lastRecordedPoint.lng,
+                    accuracy: 100.0,
+                  },
+                  timestamp: lastRecordedPoint.time,
+                } as PositionResult);
+              } else {
+                reject(new Error('Location timeout: unable to get a GPS fix.'));
+              }
+            },
+            { 
+              enableHighAccuracy: false, 
+              timeout: 5000, 
+              maximumAge: 60000,
+              forceLocationManager: isBBKDevice,
+            },
           );
         }
       }, 15000); // 15 seconds max wait for a highly accurate fix
@@ -636,11 +746,23 @@ export const LocationService = {
     if (Platform.OS === 'android') {
       try {
         const isOptimized = await (BackgroundService as any).checkBatteryOptimization();
-        if (isOptimized === true || isOptimized === 'true') {
+        const isBBK = isBBKDevice;
+
+        // On BBK devices we always prompt the user to check settings because OxygenOS/FuntouchOS custom battery limits
+        // (App Auto-launch, sleep standby optimization) bypass standard Android optimization checking!
+        if (isOptimized === true || isOptimized === 'true' || isBBK) {
           await new Promise<void>((resolve) => {
+            const title = isBBK ? 'Background Location Setup' : 'Disable Battery Optimization';
+            const message = isBBK
+              ? 'Your device aggressively restricts background apps. To ensure reliable tracking:\n\n' +
+                '1. Set App Battery usage to "Unrestricted" / "Don\'t optimize" / "Allow background power usage".\n' +
+                '2. Enable "Auto-launch" or "Autostart" for this app.\n' +
+                '3. Lock the app in your Recent Apps view (open Recent Apps, click the app icon/three dots, and tap "Lock").'
+              : 'Battery optimization is enabled. Android may kill tracking in the background. Please select "Battery" -> "Unrestricted" in the settings page to prevent tracking issues.';
+
             Alert.alert(
-              'Disable Battery Optimization',
-              'Battery optimization is enabled. Android may kill tracking in the background. Please select "Battery" -> "Unrestricted" in the settings page to prevent tracking issues.',
+              title,
+              message,
               [
                 {
                   text: 'Cancel',
@@ -650,7 +772,25 @@ export const LocationService = {
                 {
                   text: 'Open Settings',
                   onPress: () => {
-                    Linking.openSettings();
+                    if (isBBK && PipModule?.openOnePlusAutoLaunchSettings) {
+                      try {
+                        PipModule.openOnePlusAutoLaunchSettings();
+                      } catch (e) {
+                        try {
+                          PipModule.requestDisableBatteryOptimization();
+                        } catch (e2) {
+                          Linking.openSettings();
+                        }
+                      }
+                    } else if (PipModule?.requestDisableBatteryOptimization) {
+                      try {
+                        PipModule.requestDisableBatteryOptimization();
+                      } catch (e) {
+                        Linking.openSettings();
+                      }
+                    } else {
+                      Linking.openSettings();
+                    }
                     resolve();
                   },
                 },
@@ -675,6 +815,14 @@ export const LocationService = {
    * Android → Foreground Service running native watchPosition internally
    */
   startTracking: async (): Promise<void> => {
+    // Check if Location Services (GPS) are enabled globally
+    const gpsEnabled = await LocationService.isLocationServicesEnabled();
+    if (!gpsEnabled) {
+      await LocationService.promptEnableLocationServices();
+      console.warn('[LocationService] startTracking aborted — GPS/Location services not enabled');
+      return;
+    }
+
     const hasPerms = await LocationService.requestPermissions();
     if (!hasPerms) {
       console.warn('[LocationService] startTracking aborted — permissions not granted');
@@ -769,6 +917,11 @@ export const LocationService = {
       androidWatchId = null;
       console.log('[LocationService] Android: watchPosition cleaned up');
     }
+    if (androidNetworkWatchId !== null) {
+      Geolocation.clearWatch(androidNetworkWatchId);
+      androidNetworkWatchId = null;
+      console.log('[LocationService] Android: network watchPosition cleaned up');
+    }
 
     if (!BackgroundService.isRunning()) return;
 
@@ -823,5 +976,75 @@ export const LocationService = {
   syncOfflineQueue: async (): Promise<void> => {
     console.log('[LocationService] Manual offline queue sync triggered.');
     await processQueue();
+  },
+
+  // ── isLocationServicesEnabled ─────────────────────────────────────────────
+  isLocationServicesEnabled: async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        if (PipModule && typeof PipModule.isLocationEnabled === 'function') {
+          return await PipModule.isLocationEnabled();
+        }
+      } catch (e) {
+        console.warn('[LocationService] Failed to check isLocationEnabled:', e);
+      }
+      return false;
+    } else if (Platform.OS === 'ios') {
+      try {
+        const auth = await Geolocation.requestAuthorization('always');
+        return auth !== 'disabled';
+      } catch (e) {
+        console.warn('[LocationService] Failed to check iOS requestAuthorization:', e);
+      }
+      return false;
+    }
+    return true;
+  },
+
+  // ── promptEnableLocationServices ──────────────────────────────────────────
+  promptEnableLocationServices: async (): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      const title = Platform.OS === 'ios' ? 'Location Services Disabled' : 'GPS is Disabled';
+      const message = Platform.OS === 'ios'
+        ? 'Location services (GPS) are disabled globally on your device. Please turn on Location Services in settings to allow tracking.'
+        : 'Location services (GPS) are required to punch in and track your location. Please turn on Location in settings.';
+
+      Alert.alert(
+        title,
+        message,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => resolve(),
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              if (Platform.OS === 'android') {
+                if (PipModule && typeof PipModule.openLocationSettings === 'function') {
+                  PipModule.openLocationSettings();
+                } else {
+                  Linking.openSettings();
+                }
+              } else {
+                Linking.openSettings();
+              }
+              resolve();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  },
+
+  // ── subscribeToLocationUpdates ────────────────────────────────────────────
+  /** Subscribe to location updates in real-time. Returns an unsubscribe function. */
+  subscribeToLocationUpdates: (callback: LocationListener): (() => void) => {
+    listeners.add(callback);
+    return () => {
+      listeners.delete(callback);
+    };
   },
 };
