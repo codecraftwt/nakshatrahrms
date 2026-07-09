@@ -29,7 +29,8 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const mapRef = useRef<MapView>(null);
 
 
-    const sessions = routeData?.attendance_sessions || [];
+  const isCorrectDate = !dateParam || routeData?.date === dateParam;
+  const sessions = isCorrectDate ? (routeData?.attendance_sessions || []) : [];
 
   // Handle hardware back button
   useFocusEffect(
@@ -60,8 +61,6 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (routeData?.attendance_sessions?.length === 1) {
       setSelectedSessionId(routeData.attendance_sessions[0].attendance_id);
-    } else {
-      setSelectedSessionId(null);
     }
   }, [routeData]);
 
@@ -95,22 +94,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
   // const sessions = routeData?.attendance_sessions || [];
 
-  // 1. Loading State
-  if (routeLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Routes</Text>
-        </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // 1. Loading State removed to make loading smoother
 
   // 2. List View (Multiple Sessions, None Selected)
   if (sessions.length > 1 && selectedSessionId === null) {
@@ -171,7 +155,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
     ? sessions.find((s: any) => s.attendance_id === selectedSessionId)
     : (sessions.length === 1 ? sessions[0] : null);
 
-  const routePoints = (activeSession ? activeSession.route : routeData?.route)
+  const routePoints = (activeSession ? activeSession.route : (isCorrectDate ? routeData?.route : []))
     ?.slice()
     .sort((a: any, b: any) => {
       const timeA = new Date(a.datetime || a.recorded_at || 0).getTime();
@@ -190,10 +174,10 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const record = historyData?.records?.find((r: any) => r.date === dateParam);
   const attendance = activeSession ? activeSession.attendance : record?.attendances?.[0];
 
-  const punchInTime = attendance?.check_in ? formatTimeStr(attendance.check_in) : 'Not Punched In';
-  const punchOutTime = attendance?.check_out ? formatTimeStr(attendance.check_out) : 'Ongoing';
-  const displayKm = activeSession?.total_km ?? routeData?.total_km;
-  const displayPoints = activeSession?.total_points ?? routeData?.total_points;
+  const punchInTime = (isCorrectDate || record) && attendance?.check_in ? formatTimeStr(attendance.check_in) : '--:--';
+  const punchOutTime = (isCorrectDate || record) && attendance?.check_out ? formatTimeStr(attendance.check_out) : '--:--';
+  const displayKm = isCorrectDate ? (activeSession?.total_km ?? routeData?.total_km) : undefined;
+  const displayPoints = isCorrectDate ? (activeSession?.total_points ?? routeData?.total_points) : undefined;
 
   const handleBack = () => {
     if (sessions.length > 1 && selectedSessionId !== null) {
@@ -215,7 +199,9 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.mapBox}>
-          {routePoints.length > 0 ? (
+          {routeLoading && !isCorrectDate ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : routePoints.length > 0 ? (
             <MapView
               ref={mapRef}
               provider={PROVIDER_GOOGLE}
@@ -247,6 +233,8 @@ export const RouteDetailScreen = ({ navigation }: any) => {
                 <Marker coordinate={endLocation} pinColor="red" title="End Location" />
               )}
             </MapView>
+          ) : routeLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
           ) : (
             <>
               <Icon name="map-marker-path" size={28} color={colors.textSecondary} />

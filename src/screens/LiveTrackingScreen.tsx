@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, Image, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { AppText as Text } from '../components/AppText';
 
@@ -16,9 +16,9 @@ import { ActivityIndicator } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { postPunchOut } from '../redux/slice/attendanceSlice';
-import { fetchLiveKm, fetchKmSummary } from '../redux/slice/trackingSlice';
+import { fetchLiveKm, fetchKmSummary, fetchRouteData } from '../redux/slice/trackingSlice';
 import Geolocation from 'react-native-geolocation-service';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { usePipMode } from '../hooks/usePipMode';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 
@@ -29,19 +29,45 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
+  const { liveKmData, kmSummaryData, routeData } = useSelector((state: RootState) => state.tracking);
+  const [isMapExpanded, setIsMapExpanded] = React.useState(false);
+  const [routeCoordinates, setRouteCoordinates] = React.useState<{latitude: number, longitude: number}[]>([]);
+  const mapRef = React.useRef<MapView>(null);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
     dispatch(fetchLiveKm());
     dispatch(fetchKmSummary('today,month'));
+    const today = new Date().toISOString().split('T')[0];
+    dispatch(fetchRouteData(today));
 
     const interval = setInterval(() => {
       dispatch(fetchLiveKm());
+      dispatch(fetchRouteData(today));
     }, 15000);
 
     return () => clearInterval(interval);
   }, [dispatch]);
+
+  React.useEffect(() => {
+    const sessions = routeData?.attendance_sessions || [];
+    const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
+    let points: any[] = ongoingSession?.route || routeData?.route || [];
+
+    if (points.length > 0) {
+      const formattedPoints = points.slice()
+        .sort((a: any, b: any) => {
+          const timeA = new Date(a.datetime || a.recorded_at || 0).getTime();
+          const timeB = new Date(b.datetime || b.recorded_at || 0).getTime();
+          return timeA - timeB;
+        })
+        .map((pt: any) => ({
+          latitude: Number(pt.lat || pt.latitude),
+          longitude: Number(pt.lng || pt.longitude),
+        }));
+      setRouteCoordinates(formattedPoints);
+    }
+  }, [routeData]);
   const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
   const [outRemarks, setOutRemarks] = React.useState('');
   const [selfieUri, setSelfieUri] = React.useState<string | null>(null);
@@ -109,6 +135,11 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
     // Subscribe to background location updates in real-time
     const unsubscribe = LocationService.subscribeToLocationUpdates((lat, lng) => {
       setCurrentLocation({ lat, lng });
+      setRouteCoordinates(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.latitude === lat && last.longitude === lng) return prev;
+        return [...prev, { latitude: lat, longitude: lng }];
+      });
     });
 
     return () => {
@@ -258,6 +289,49 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
     }
   };
 
+  const renderMap = (expanded: boolean) => (
+    <View style={expanded ? styles.expandedMapContainer : styles.mapBox}>
+      {currentLocation ? (
+        <MapView
+          ref={expanded ? mapRef : undefined}
+          provider={PROVIDER_GOOGLE}
+          style={{ width: '100%', height: '100%', borderRadius: expanded ? 0 : 12 }}
+          region={{
+            latitude: currentLocation.lat,
+            longitude: currentLocation.lng,
+            latitudeDelta: expanded ? 0.005 : 0.01,
+            longitudeDelta: expanded ? 0.005 : 0.01,
+          }}
+        >
+          {routeCoordinates.length > 0 && (
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor={colors.primary}
+              strokeWidth={4}
+            />
+          )}
+          <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
+        </MapView>
+      ) : (
+        <ActivityIndicator size="large" color={colors.primary} />
+      )}
+      
+      <TouchableOpacity 
+        style={styles.expandButton} 
+        onPress={() => setIsMapExpanded(!expanded)}
+      >
+        <Icon name={expanded ? "fullscreen-exit" : "fullscreen"} size={28} color={colors.primary} />
+      </TouchableOpacity>
+
+      {!expanded && (
+        <View style={styles.gpsActiveOverlay}>
+          <View style={styles.greenDot} />
+          <Text style={styles.gpsText}>GPS active</Text>
+        </View>
+      )}
+    </View>
+  );
+
   if (isPipMode) {
     return (
       <View style={{ flex: 1 }}>
@@ -276,6 +350,13 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
             scrollEnabled={false}
             zoomEnabled={false}
           >
+            {routeCoordinates.length > 0 && (
+              <Polyline
+                coordinates={routeCoordinates}
+                strokeColor={colors.primary}
+                strokeWidth={4}
+              />
+            )}
             <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
           </MapView>
         ) : (
@@ -315,29 +396,20 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
       <KeyboardAwareScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={true} enableOnAndroid={true} extraScrollHeight={20}>
         {user?.track_live_location !== false ? (
-          <View style={styles.mapBox}>
-            {currentLocation ? (
-              <MapView
-                provider={PROVIDER_GOOGLE}
-                style={{ width: '100%', height: '100%', borderRadius: 12 }}
-                initialRegion={{
-                  latitude: currentLocation.lat,
-                  longitude: currentLocation.lng,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-              >
-                <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
-              </MapView>
-            ) : (
-              <ActivityIndicator size="large" color={colors.primary} />
-            )}
-            
-            <View style={styles.gpsActiveOverlay}>
-              <View style={styles.greenDot} />
-              <Text style={styles.gpsText}>GPS active</Text>
-            </View>
-          </View>
+          <>
+            {renderMap(false)}
+            <Modal visible={isMapExpanded} animationType="slide" transparent={false} onRequestClose={() => setIsMapExpanded(false)}>
+              <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPage }}>
+                <View style={styles.header}>
+                  <TouchableOpacity onPress={() => setIsMapExpanded(false)} style={styles.backBtn}>
+                    <Icon name="arrow-left" size={24} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={styles.headerTitle}>Live Route</Text>
+                </View>
+                {renderMap(true)}
+              </SafeAreaView>
+            </Modal>
+          </>
         ) : (
           <View style={styles.cameraContainer}>
             <TouchableOpacity style={styles.cameraBox} onPress={takeSelfie} activeOpacity={0.8}>
@@ -466,6 +538,26 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+  },
+  expandedMapContainer: {
+    flex: 1,
+    backgroundColor: colors.bgPage,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  expandButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 8,
+    padding: 6,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   mapText: {
     color: colors.textSecondary,
