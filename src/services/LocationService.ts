@@ -1,17 +1,15 @@
 import Geolocation from 'react-native-geolocation-service';
 import BackgroundService from 'react-native-background-actions';
 import { PermissionsAndroid, Platform, Alert, Linking, NativeModules } from 'react-native';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
+// Removed unused uuid import
 import api from '../api/axiosInstance';
 import { Q } from '@nozbe/watermelondb';
 import { database, LocationPoint } from '../database';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const OFFLINE_QUEUE_KEY          = 'offlineLocations';
-const MAX_QUEUE_SIZE             = 10000;  // ~11 hours offline at 4-second intervals
-const ACCURACY_THRESHOLD         = 500;    // metres — relaxed to allow network/cell-tower fallback during Doze mode
-                                            // (75m was too tight and dropped all background points when GPS slept)
+const MAX_QUEUE_SIZE             = 10000;  // ~27 hours offline at 10-second intervals
+const ACCURACY_THRESHOLD         = 300;    // metres — standard acceptable accuracy
+const ACCURACY_FALLBACK_THRESHOLD = 2500;  // metres — only used after repeated rejects to survive Doze mode
 const TRACKING_DELAY_MS          = 4000;   // Android keep-alive heartbeat (ms)
 const BATCH_WRITE_SIZE           = 20;     // flush processed IDs every N items
 const MIN_DISTANCE_METERS        = 5;      // below this = "stationary" for jitter purposes
@@ -20,12 +18,6 @@ const STATIONARY_PING_INTERVAL_MS = 5 * 60 * 1000; // force a "still here" ping 
 const MAX_CONSECUTIVE_SPEED_REJECTS = 3;   // force-accept a point after this many rejects
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface LocationPayload {
-  id: string;       // UUID — prevents dedup key collisions on datetime
-  latitude: number;
-  longitude: number;
-  datetime: string;
-}
 
 // Minimal shape returned by both getCurrentPosition and watchPosition
 interface PositionResult {
@@ -44,9 +36,12 @@ let androidWatchId: number | null = null;
 let androidNetworkWatchId: number | null = null;
 let lastRecordedPoint: { lat: number; lng: number; time: number } | null = null;
 let consecutiveSpeedRejects = 0;
+let consecutiveAccuracyRejects = 0;
 let isTrackingStopped = false; // guard against callbacks firing after stopTracking
 let lastLocationCallbackTime = 0; // watchdog timer to detect watchPosition stalls
 let lastSyncAttemptTime = 0;
+const retryCounts = new Map<string, number>(); // track retry attempts per offline point id
+let hasShownBatteryPrompt = false; // track if we already showed the battery alert this session
 
 const { PipModule } = NativeModules;
 
@@ -97,6 +92,11 @@ const applyKalmanFilter = (
     kalmanLng = lng;
     kalmanLastTimestamp = timestampMs;
     return { latitude: lat, longitude: lng };
+  }
+
+  if (timestampMs <= kalmanLastTimestamp) {
+    // stale/out-of-order fix from the other provider — ignore for filter purposes
+    return { latitude: kalmanLat, longitude: kalmanLng };
   }
 
   const dt = (timestampMs - kalmanLastTimestamp) / 1000.0;
@@ -163,17 +163,31 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
   // Update watchdog timestamp on any location activity from native side
   lastLocationCallbackTime = Date.now();
 
-  // 1. Skip low-accuracy fixes (jitter filter)
-  if (
-    position.coords.accuracy !== null &&
-    position.coords.accuracy > ACCURACY_THRESHOLD
-  ) {
-    console.log(
-      '[LocationService] Skipping inaccurate fix, accuracy:',
-      position.coords.accuracy,
-    );
+  if (lastRecordedPoint && position.timestamp <= lastRecordedPoint.time) {
+    console.warn('[LocationService] Dropping stale/out-of-order fix');
     return;
   }
+
+  // 1. Accuracy gate (with fallback for Doze mode cell-tower fixes)
+  const accuracy = position.coords.accuracy;
+  if (accuracy !== null) {
+    if (accuracy > ACCURACY_FALLBACK_THRESHOLD) {
+      console.log('[LocationService] Dropping severely inaccurate fix:', accuracy);
+      return;
+    }
+    
+    if (accuracy > ACCURACY_THRESHOLD) {
+      consecutiveAccuracyRejects++;
+      if (consecutiveAccuracyRejects < 3) {
+        console.log('[LocationService] Skipping inaccurate fix, accuracy:', accuracy);
+        return;
+      }
+      console.warn('[LocationService] Accepting point despite low accuracy — too many consecutive rejects');
+    }
+  }
+  
+  // Reset accuracy rejects since we got a good point (or force-accepted one)
+  consecutiveAccuracyRejects = 0;
 
   // 1.5 Apply Kalman Filter to smooth out coords and reduce stationary drift
   const currentAccuracy = position.coords.accuracy ?? 30.0;
@@ -274,7 +288,9 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
         point.datetime = new Date(position.timestamp).toISOString();
       });
     });
-    console.log('[LocationService] Saved coordinate to WatermelonDB:', position.coords.latitude, position.coords.longitude);
+    if (__DEV__) {
+      console.log('[LocationService] Saved coordinate to WatermelonDB:', position.coords.latitude, position.coords.longitude);
+    }
   } catch (dbError) {
     console.warn('[LocationService] Database write error:', dbError);
   }
@@ -321,12 +337,14 @@ const processQueue = async (): Promise<void> => {
       for (const item of queue) {
         try {
           await api.post('/tracking/location', {
+            id: item.id,
             latitude: item.latitude,
             longitude: item.longitude,
             datetime: item.datetime,
-          });
+          }, { timeout: 15000 });
           console.log('[LocationService] Successfully synced location coordinate:', item.latitude, item.longitude, 'at', item.datetime);
           processedIds.add(item.id);
+          retryCounts.delete(item.id);
         } catch (error: any) {
           if (
             error.response &&
@@ -340,14 +358,23 @@ const processQueue = async (): Promise<void> => {
               error.response.data,
             );
             processedIds.add(item.id);
+            retryCounts.delete(item.id);
           } else {
             // Network down or 5xx — pause, retry next cycle
-            console.warn(
-              '[LocationService] Network/5xx error — pausing:',
-              error?.message,
-            );
-            networkFailed = true;
-            break;
+            const retries = (retryCounts.get(item.id) || 0) + 1;
+            if (retries >= 20) {
+              console.warn('[LocationService] Quarantining point after 20 failed attempts:', item.id);
+              processedIds.add(item.id);
+              retryCounts.delete(item.id);
+            } else {
+              retryCounts.set(item.id, retries);
+              console.warn(
+                '[LocationService] Network/5xx error — pausing:',
+                error?.message,
+              );
+              networkFailed = true;
+              break;
+            }
           }
         }
 
@@ -429,7 +456,7 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
       fastestInterval: 5000,
       showLocationDialog: false,   // don't prompt to enable GPS (already handled)
       forceRequestLocation: true,  // FIX: Forces FusedLocationProvider to actively fetch location in background
-      forceLocationManager: isBBKDevice, // Bypasses Play Services' background limits on BBK devices
+      forceLocationManager: false, // Let Google Play Services handle background batching
     },
   );
 
@@ -453,7 +480,7 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
       fastestInterval: 10000,
       showLocationDialog: false,
       forceRequestLocation: true,
-      forceLocationManager: isBBKDevice,
+      forceLocationManager: false,
     },
   );
 
@@ -512,18 +539,18 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
                 },
                 {
                   enableHighAccuracy: false,
-                  timeout: 10000,
+                  timeout: 30000,
                   maximumAge: 30000,
-                  forceLocationManager: isBBKDevice,
+                  forceLocationManager: false,
                 }
               );
             },
             {
               enableHighAccuracy: true,
-              timeout: 10000,
+              timeout: 30000,
               maximumAge: 0,
               forceRequestLocation: true,
-              forceLocationManager: isBBKDevice, // Bypasses Play Services' background limits on OnePlus
+              forceLocationManager: false, // Let Google Play Services handle background batching
             },
           );
         });
@@ -617,7 +644,7 @@ export const LocationService = {
           distanceFilter: 0, 
           interval: 1000, 
           fastestInterval: 500,
-          forceLocationManager: isBBKDevice,
+          forceLocationManager: false,
         },
       );
 
@@ -652,7 +679,7 @@ export const LocationService = {
               enableHighAccuracy: false, 
               timeout: 5000, 
               maximumAge: 60000,
-              forceLocationManager: isBBKDevice,
+              forceLocationManager: false,
             },
           );
         }
@@ -745,12 +772,16 @@ export const LocationService = {
     // Android: Battery Optimization check
     if (Platform.OS === 'android') {
       try {
-        const isOptimized = await (BackgroundService as any).checkBatteryOptimization();
+        let isOptimized = false;
+        if (typeof (BackgroundService as any).checkBatteryOptimization === 'function') {
+          isOptimized = await (BackgroundService as any).checkBatteryOptimization();
+        }
         const isBBK = isBBKDevice;
 
         // On BBK devices we always prompt the user to check settings because OxygenOS/FuntouchOS custom battery limits
         // (App Auto-launch, sleep standby optimization) bypass standard Android optimization checking!
-        if (isOptimized === true || isOptimized === 'true' || isBBK) {
+        if (!hasShownBatteryPrompt && (isOptimized === true || isOptimized === 'true' || isBBK)) {
+          hasShownBatteryPrompt = true;
           await new Promise<void>((resolve) => {
             const title = isBBK ? 'Background Location Setup' : 'Disable Battery Optimization';
             const message = isBBK
@@ -867,6 +898,7 @@ export const LocationService = {
         {
           enableHighAccuracy: true,
           distanceFilter: 10,                     // fire every ~10m of real movement
+          allowsBackgroundLocationUpdates: true,   // required for iOS background tracking
           showsBackgroundLocationIndicator: true,  // blue status-bar indicator (required by Apple)
           useSignificantChanges: false,            // false = fine-grained; true = cell-tower only
         },
