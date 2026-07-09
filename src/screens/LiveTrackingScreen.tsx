@@ -75,6 +75,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
   const takeSelfie = async () => {
     try {
+      setPipAllowed(false);
       const options: CameraOptions = {
         mediaType: 'photo',
         saveToPhotos: false,
@@ -86,6 +87,8 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
       };
 
       const result = await launchCamera(options);
+      setPipAllowed(true);
+      
       if (result.didCancel) return;
       if (result.errorCode || !result.assets || result.assets.length === 0) {
         showAlert('Error', 'Failed to capture selfie.');
@@ -197,6 +200,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
       if (user?.track_live_location === false) {
         if (!base64Selfie) {
+          setPipAllowed(false);
           const options: CameraOptions = {
             mediaType: 'photo',
             saveToPhotos: false,
@@ -208,6 +212,8 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           };
 
           const result = await launchCamera(options);
+          setPipAllowed(true);
+          
           if (result.didCancel) {
             setLoading(false);
             return;
@@ -229,6 +235,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           setSelfieBase64(base64Selfie);
         }
       } else {
+        setPipAllowed(false);
         const options: CameraOptions = {
           mediaType: 'photo',
           saveToPhotos: false,
@@ -240,6 +247,8 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         };
 
         const result = await launchCamera(options);
+        setPipAllowed(true);
+        
         if (result.didCancel) {
           setLoading(false);
           return;
