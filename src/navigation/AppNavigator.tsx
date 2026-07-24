@@ -10,6 +10,7 @@ import { CustomAlertModal } from '../components/CustomAlertModal';
 
 // Screens
 import { SplashScreen } from '../screens/SplashScreen';
+import { ServerUrlScreen } from '../screens/ServerUrlScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { MainTabs } from './MainTabs';
@@ -54,6 +55,7 @@ export const AppNavigator = () => {
       />
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="SplashScreen">
         <Stack.Screen name="SplashScreen" component={SplashScreen} />
+        <Stack.Screen name="ServerUrlScreen" component={ServerUrlScreen} />
         <Stack.Screen name="LoginScreen" component={LoginScreen} />
         <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />

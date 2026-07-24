@@ -37,9 +37,13 @@ export const LoginScreen = ({ navigation }: any) => {
       <View style={styles.shape2} />
       <View style={styles.shape3} />
 
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.replace('ServerUrlScreen')}>
+        <Icon name="arrow-left" size={28} color={colors.textPrimary} />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
@@ -146,6 +150,23 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 100,
     backgroundColor: colors.primary,
     opacity: 0.08,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 24,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.bgSurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   keyboardView: {
     flex: 1,

@@ -17,14 +17,23 @@ export const SplashScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (isLoggedIn) {
-        navigation.replace('MainTabs');
-      } else {
-        navigation.replace('LoginScreen');
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
+    const initialize = async () => {
+      const { initializeBaseUrl } = require('../api/axiosInstance');
+      const savedUrl = await initializeBaseUrl();
+      
+      // Wait for a minimum time so splash screen is visible
+      setTimeout(() => {
+        if (!savedUrl) {
+          navigation.replace('ServerUrlScreen');
+        } else if (isLoggedIn) {
+          navigation.replace('MainTabs');
+        } else {
+          navigation.replace('LoginScreen');
+        }
+      }, 1500);
+    };
+
+    initialize();
   }, [navigation, isLoggedIn]);
 
   return (

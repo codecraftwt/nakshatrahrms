@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { logout } from '../redux/slice/authSlice';
 import { clearProfile } from '../redux/slice/profileSlice';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BASE_URL = 'http://209.182.233.135:8075/';
-
+export let BASE_URL = 'https://laxmidatta.nakshatrainfo.co.in/';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -15,6 +15,27 @@ const api = axios.create({
     'X-Requested-With': 'XMLHttpRequest',
   },
 });
+
+export const setBaseUrl = async (url) => {
+  BASE_URL = url;
+  api.defaults.baseURL = url;
+  await AsyncStorage.setItem('@app_base_url', url);
+};
+
+export const initializeBaseUrl = async () => {
+  try {
+    const savedUrl = await AsyncStorage.getItem('@app_base_url');
+    if (savedUrl) {
+      BASE_URL = savedUrl;
+      api.defaults.baseURL = savedUrl;
+      return savedUrl;
+    }
+  } catch (e) {
+    console.error('Failed to load base URL', e);
+  }
+  return null;
+};
+
 
 // Request interceptor to attach token
 api.interceptors.request.use(

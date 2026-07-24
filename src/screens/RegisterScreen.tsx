@@ -35,7 +35,7 @@ export const RegisterScreen = ({ navigation }: any) => {
 
       <KeyboardAvoidingView 
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
