@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { AttendanceScreen } from '../screens/AttendanceScreen';
 import { LeaveScreen } from '../screens/LeaveScreen';
+import { ExploreScreen } from '../screens/ExploreScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
@@ -29,6 +30,8 @@ export const MainTabs = () => {
             iconName = 'fingerprint';
           } else if (route.name === 'Leave') {
             iconName = 'calendar-outline';
+          } else if (route.name === 'Explore') {
+            iconName = 'compass-outline';
           } else if (route.name === 'Profile') {
             iconName = 'account-outline';
           }
@@ -54,6 +57,7 @@ export const MainTabs = () => {
       <Tab.Screen name="Home" component={DashboardScreen} />
       <Tab.Screen name="Attend" component={AttendanceScreen} />
       <Tab.Screen name="Leave" component={LeaveScreen} />
+      <Tab.Screen name="Explore" component={ExploreScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

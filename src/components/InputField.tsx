@@ -8,8 +8,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ThemeColors } from '../theme/colors';
 
 interface InputFieldProps {
-  label: string;
-  placeholder: string;
+  label?: string;
+  placeholder?: string;
   value: string;
   onChangeText: (v: string) => void;
   secureTextEntry?: boolean;
@@ -18,10 +18,12 @@ interface InputFieldProps {
   multiline?: boolean;
   height?: number;
   onPress?: () => void;
+  editable?: boolean;
+  keyboardType?: any;
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
-  label, placeholder, value, onChangeText, secureTextEntry, leftIcon, rightIcon, multiline, height, onPress
+  label, placeholder, value, onChangeText, secureTextEntry, leftIcon, rightIcon, multiline, height, onPress, editable = true, keyboardType
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(!secureTextEntry);
@@ -67,7 +69,8 @@ export const InputField: React.FC<InputFieldProps> = ({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             multiline={multiline}
-            editable={!onPress}
+            editable={editable !== false && !onPress}
+            keyboardType={keyboardType}
           />
         </View>
 

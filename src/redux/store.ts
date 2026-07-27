@@ -9,8 +9,7 @@ import attendanceReducer from './slice/attendanceSlice';
 import leaveReducer from './slice/leaveSlice';
 import payrollReducer from './slice/payrollSlice';
 import trackingReducer from './slice/trackingSlice';
-
-
+import expenseReducer from './slice/expenseSlice';
 const rootReducer = combineReducers({
   auth: getPersistedReducer('auth', authReducer),
   dashboard: dashboardReducer,
@@ -20,6 +19,7 @@ const rootReducer = combineReducers({
   leave: leaveReducer,
   payroll: payrollReducer,
   tracking: trackingReducer,
+  expense: expenseReducer,
 });
 
 export const store = configureStore({

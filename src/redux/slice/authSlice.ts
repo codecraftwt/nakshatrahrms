@@ -10,6 +10,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   isSessionExpiredModalVisible: boolean;
+  isManager: boolean;
 }
 
 const initialState: AuthState = {
@@ -20,6 +21,7 @@ const initialState: AuthState = {
   loading: false,
   error: null,
   isSessionExpiredModalVisible: false,
+  isManager: false,
 };
 
 export const loginCandidate = createAsyncThunk(
@@ -97,12 +99,16 @@ const authSlice = createSlice({
       state.tokenType = null;
       state.isLoggedIn = false;
       state.error = null;
+      state.isManager = false;
     },
     clearError: (state) => {
       state.error = null;
     },
     setSessionExpiredModalVisible: (state, action) => {
       state.isSessionExpiredModalVisible = action.payload;
+    },
+    setIsManager: (state, action) => {
+      state.isManager = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -117,6 +123,7 @@ const authSlice = createSlice({
         // Updated to handle the new login endpoint payload
         state.user = action.payload?.result || action.payload?.data?.employee || action.payload?.data?.user || action.payload?.data || action.payload;
         state.token = action.payload?.session_id || action.payload?.data?.token || action.payload?.token || action.payload?.access_token || action.payload?.data?.access_token;
+        state.isManager = action.payload?.data?.is_manager || action.payload?.is_manager || false;
       })
       .addCase(loginCandidate.rejected, (state, action) => {
         state.loading = false;
@@ -126,5 +133,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, setSessionExpiredModalVisible } = authSlice.actions;
+export const { logout, clearError, setSessionExpiredModalVisible, setIsManager } = authSlice.actions;
 export default authSlice.reducer;

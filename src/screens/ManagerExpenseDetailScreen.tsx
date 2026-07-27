@@ -1,0 +1,373 @@
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../redux/store';
+import { approveExpenseRequest, refuseExpenseRequest, fetchExpenseApprovals } from '../redux/slice/expenseSlice';
+import { CustomAlertModal } from '../components/CustomAlertModal';
+
+export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const dispatch = useDispatch<AppDispatch>();
+  const insets = useSafeAreaInsets();
+  
+  const { expense } = route.params;
+  const [loadingAction, setLoadingAction] = useState<'approve' | 'refuse' | null>(null);
+  const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' as any });
+
+  const categoryName = expense.category?.name || (Array.isArray(expense.product_id) ? expense.product_id[1] : expense.product_id?.name) || 'Expense';
+  const displayCategoryName = categoryName.replace(/^\[.*?\]\s*/, '').trim();
+  const descriptionName = (expense.name || expense.description || 'Expense').replace(/^\[.*?\]\s*/, '').trim();
+  const employeeName = Array.isArray(expense.employee_id) ? expense.employee_id[1] : expense.employee_id?.name || 'Employee';
+  const amount = expense.total_amount || 0;
+  const date = expense.date || expense.create_date?.split(' ')[0] || '';
+  const statusLabel = expense.state_label || expense.status || 'Pending';
+  const paymentMode = expense.payment_mode_label || 'Employee (to reimburse)';
+
+  const getCategoryIcon = (catName: string) => {
+    const lower = catName.toLowerCase();
+    if (lower.includes('food')) return 'food-fork-drink';
+    if (lower.includes('fuel') || lower.includes('mil')) return 'gas-station';
+    if (lower.includes('gift')) return 'gift';
+    if (lower.includes('recharge')) return 'cellphone-charging';
+    if (lower.includes('travel') || lower.includes('rent') || lower.includes('hotel')) return 'airplane';
+    return 'receipt';
+  };
+
+  const handleApprove = async () => {
+    setLoadingAction('approve');
+    const action = await dispatch(approveExpenseRequest(expense.id));
+    if (approveExpenseRequest.fulfilled.match(action)) {
+      await dispatch(fetchExpenseApprovals({ limit: 50 }));
+      navigation.goBack();
+    } else {
+      setAlertConfig({
+        visible: true,
+        title: 'Error',
+        message: (action.payload as string) || 'Failed to approve expense.',
+        type: 'error'
+      });
+    }
+    setLoadingAction(null);
+  };
+
+  const handleRefuse = async () => {
+    setLoadingAction('refuse');
+    const action = await dispatch(refuseExpenseRequest(expense.id));
+    if (refuseExpenseRequest.fulfilled.match(action)) {
+      await dispatch(fetchExpenseApprovals({ limit: 50 }));
+      navigation.goBack();
+    } else {
+      setAlertConfig({
+        visible: true,
+        title: 'Error',
+        message: (action.payload as string) || 'Failed to refuse expense.',
+        type: 'error'
+      });
+    }
+    setLoadingAction(null);
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="arrow-left" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Expense Details</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+        {/* Top Info Banner */}
+        <View style={styles.topBanner}>
+          <View style={styles.iconCircle}>
+            <Icon name={getCategoryIcon(categoryName)} size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.titleText}>{descriptionName}</Text>
+          <Text style={styles.amountText}>${amount.toFixed(2)}</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{statusLabel}</Text>
+          </View>
+        </View>
+
+        {/* Details Card */}
+        <View style={styles.detailCard}>
+          <Text style={styles.sectionTitle}>General Information</Text>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Employee</Text>
+            <View style={styles.employeeRow}>
+              <View style={styles.avatarMini}>
+                <Text style={styles.avatarMiniText}>{employeeName.charAt(0)}</Text>
+              </View>
+              <Text style={styles.detailValue}>{employeeName}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Date</Text>
+            <Text style={styles.detailValue}>{date}</Text>
+          </View>
+          
+          <View style={styles.divider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Category</Text>
+            <Text style={styles.detailValue}>{displayCategoryName}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Payment Mode</Text>
+            <Text style={styles.detailValue}>{paymentMode}</Text>
+          </View>
+
+          {expense.quantity !== undefined && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Quantity</Text>
+                <Text style={styles.detailValue}>{expense.quantity}</Text>
+              </View>
+            </>
+          )}
+
+          {expense.unit_price !== undefined && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Unit Price</Text>
+                <Text style={styles.detailValue}>${expense.unit_price.toFixed(2)}</Text>
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Floating Action Bar */}
+      <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <TouchableOpacity 
+          style={[styles.actionBtn, styles.refuseBtn]} 
+          onPress={handleRefuse}
+          disabled={loadingAction !== null}
+        >
+          {loadingAction === 'refuse' ? (
+            <ActivityIndicator color={colors.textSecondary} size="small" />
+          ) : (
+            <>
+              <Icon name="close" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+              <Text style={styles.refuseBtnText}>Refuse</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.actionBtn, styles.approveBtn]} 
+          onPress={handleApprove}
+          disabled={loadingAction !== null}
+        >
+          {loadingAction === 'approve' ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <Icon name="check" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.approveBtnText}>Approve</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+      
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onPrimaryPress={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
+      />
+    </SafeAreaView>
+  );
+};
+
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.bgPage,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: colors.bgPage,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  backBtn: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  scrollContent: {
+    paddingTop: 16,
+    paddingHorizontal: 20,
+  },
+  topBanner: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(21, 88, 176, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  titleText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  amountText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.primary,
+    marginBottom: 12,
+  },
+  badge: {
+    backgroundColor: colors.warningBg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  badgeText: {
+    color: colors.warningText,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  detailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  employeeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  avatarMiniText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  bottomActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 10,
+    gap: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  refuseBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  refuseBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  approveBtn: {
+    backgroundColor: colors.success,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  approveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+});

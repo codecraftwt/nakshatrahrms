@@ -6,7 +6,7 @@ export const getPersistedReducer = (key, reducer) =>
     {
       key,
       storage: AsyncStorage,
-      whitelist: ['user', 'token', 'tokenType', 'isLoggedIn'],
+      whitelist: ['user', 'token', 'tokenType', 'isLoggedIn', 'isManager'],
     },
     reducer,
   );
