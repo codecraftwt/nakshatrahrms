@@ -30,6 +30,8 @@ import { ExpenseListScreen } from '../screens/ExpenseListScreen';
 import { AddExpenseScreen } from '../screens/AddExpenseScreen';
 import { ManagerExpenseListScreen } from '../screens/ManagerExpenseListScreen';
 import { ManagerExpenseDetailScreen } from '../screens/ManagerExpenseDetailScreen';
+import { PayslipListScreen } from '../screens/PayslipListScreen';
+import { UpcomingBirthdaysScreen } from '../screens/UpcomingBirthdaysScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -81,6 +83,8 @@ export const AppNavigator = () => {
         <Stack.Screen name="AddExpenseScreen" component={AddExpenseScreen} />
         <Stack.Screen name="ManagerExpenseListScreen" component={ManagerExpenseListScreen} />
         <Stack.Screen name="ManagerExpenseDetailScreen" component={ManagerExpenseDetailScreen} />
+        <Stack.Screen name="PayslipListScreen" component={PayslipListScreen} />
+        <Stack.Screen name="UpcomingBirthdaysScreen" component={UpcomingBirthdaysScreen} />
       </Stack.Navigator>
 
       <CustomAlertModal

@@ -10,6 +10,7 @@ import leaveReducer from './slice/leaveSlice';
 import payrollReducer from './slice/payrollSlice';
 import trackingReducer from './slice/trackingSlice';
 import expenseReducer from './slice/expenseSlice';
+import birthdayReducer from './slice/birthdaySlice';
 const rootReducer = combineReducers({
   auth: getPersistedReducer('auth', authReducer),
   dashboard: dashboardReducer,
@@ -20,8 +21,8 @@ const rootReducer = combineReducers({
   payroll: payrollReducer,
   tracking: trackingReducer,
   expense: expenseReducer,
+  birthday: birthdayReducer,
 });
-
 export const store = configureStore({
   reducer: rootReducer,
   middleware: getDefaultMiddleware =>

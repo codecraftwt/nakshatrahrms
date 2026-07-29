@@ -13,6 +13,12 @@ interface PayrollState {
   shiftDetailsData: any | null;
   shiftDetailsLoading: boolean;
   shiftDetailsError: string | null;
+  payslipsData: any | null;
+  payslipsLoading: boolean;
+  payslipsError: string | null;
+  payslipDetailsData: any | null;
+  payslipDetailsLoading: boolean;
+  payslipDetailsError: string | null;
 }
 
 const initialState: PayrollState = {
@@ -27,6 +33,12 @@ const initialState: PayrollState = {
   shiftDetailsData: null,
   shiftDetailsLoading: false,
   shiftDetailsError: null,
+  payslipsData: null,
+  payslipsLoading: false,
+  payslipsError: null,
+  payslipDetailsData: null,
+  payslipDetailsLoading: false,
+  payslipDetailsError: null,
 };
 
 export const syncAttendance = createAsyncThunk(
@@ -68,6 +80,32 @@ export const fetchPayrollShiftDetails = createAsyncThunk(
   }
 );
 
+export const fetchPayslips = createAsyncThunk(
+  'payroll/fetchPayslips',
+  async ({ payroll_month, payroll_year }: { payroll_month?: number, payroll_year?: number }, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/payroll/payslips?payroll_month=${payroll_month}&payroll_year=${payroll_year}`);
+      return response.data;
+    } catch (error: any) {
+      console.log('Payslips Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch payslips');
+    }
+  }
+);
+
+export const fetchPayslipDetails = createAsyncThunk(
+  'payroll/fetchPayslipDetails',
+  async (id: string | number, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/payroll/payslips/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.log('Payslip Details Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch payslip details');
+    }
+  }
+);
+
 const payrollSlice = createSlice({
   name: 'payroll',
   initialState,
@@ -81,6 +119,10 @@ const payrollSlice = createSlice({
       state.syncLeaveSuccess = false;
       state.shiftDetailsData = null;
       state.shiftDetailsError = null;
+      state.payslipsData = null;
+      state.payslipsError = null;
+      state.payslipDetailsData = null;
+      state.payslipDetailsError = null;
     },
     resetSyncSuccess: (state) => {
       state.syncSuccess = false;
@@ -132,6 +174,30 @@ const payrollSlice = createSlice({
       .addCase(fetchPayrollShiftDetails.rejected, (state, action) => {
         state.shiftDetailsLoading = false;
         state.shiftDetailsError = action.payload as string;
+      })
+      .addCase(fetchPayslips.pending, (state) => {
+        state.payslipsLoading = true;
+        state.payslipsError = null;
+      })
+      .addCase(fetchPayslips.fulfilled, (state, action) => {
+        state.payslipsLoading = false;
+        state.payslipsData = action.payload?.data || action.payload;
+      })
+      .addCase(fetchPayslips.rejected, (state, action) => {
+        state.payslipsLoading = false;
+        state.payslipsError = action.payload as string;
+      })
+      .addCase(fetchPayslipDetails.pending, (state) => {
+        state.payslipDetailsLoading = true;
+        state.payslipDetailsError = null;
+      })
+      .addCase(fetchPayslipDetails.fulfilled, (state, action) => {
+        state.payslipDetailsLoading = false;
+        state.payslipDetailsData = action.payload?.data || action.payload;
+      })
+      .addCase(fetchPayslipDetails.rejected, (state, action) => {
+        state.payslipDetailsLoading = false;
+        state.payslipDetailsError = action.payload as string;
       });
   },
 });

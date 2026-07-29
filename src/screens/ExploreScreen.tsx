@@ -41,7 +41,7 @@ export const ExploreScreen = ({ navigation }: any) => {
             style={[styles.gridCard, { borderLeftColor: '#4CAF50' }]}
             activeOpacity={0.8}
             onPress={() => {
-              console.log('Pay Slip pressed');
+              navigation.navigate('PayslipListScreen');
             }}
           >
             <View style={styles.cardHeader}>
@@ -51,6 +51,23 @@ export const ExploreScreen = ({ navigation }: any) => {
             </View>
             <Text style={styles.cardTitle}>Pay Slip</Text>
             <Text style={styles.cardSubtitle}>Download salary slip</Text>
+          </TouchableOpacity>
+
+          {/* Upcoming Birthdays Card */}
+          <TouchableOpacity 
+            style={[styles.gridCard, { borderLeftColor: '#E91E63' }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              navigation.navigate('UpcomingBirthdaysScreen');
+            }}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, { backgroundColor: '#E91E6320' }]}>
+                <Icon name="cake-variant" size={24} color="#E91E63" />
+              </View>
+            </View>
+            <Text style={styles.cardTitle}>Birthdays</Text>
+            <Text style={styles.cardSubtitle}>Upcoming birthdays</Text>
           </TouchableOpacity>
 
         </View>
