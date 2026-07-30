@@ -32,6 +32,7 @@ import { ManagerExpenseListScreen } from '../screens/ManagerExpenseListScreen';
 import { ManagerExpenseDetailScreen } from '../screens/ManagerExpenseDetailScreen';
 import { PayslipListScreen } from '../screens/PayslipListScreen';
 import { UpcomingBirthdaysScreen } from '../screens/UpcomingBirthdaysScreen';
+import { PublicHolidaysScreen } from '../screens/PublicHolidaysScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -85,6 +86,7 @@ export const AppNavigator = () => {
         <Stack.Screen name="ManagerExpenseDetailScreen" component={ManagerExpenseDetailScreen} />
         <Stack.Screen name="PayslipListScreen" component={PayslipListScreen} />
         <Stack.Screen name="UpcomingBirthdaysScreen" component={UpcomingBirthdaysScreen} />
+        <Stack.Screen name="PublicHolidaysScreen" component={PublicHolidaysScreen} />
       </Stack.Navigator>
 
       <CustomAlertModal

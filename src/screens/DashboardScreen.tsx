@@ -13,6 +13,7 @@ import { MetricTile } from '../components/MetricTile';
 import { mockUser, mockDashboard } from '../data/mockData';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchDashboardSummary } from '../redux/slice/dashboardSlice';
+
 import { setIsManager } from '../redux/slice/authSlice';
 import { fetchExpenseApprovals } from '../redux/slice/expenseSlice';
 import { LocationService } from '../services/LocationService';
@@ -118,16 +119,16 @@ export const DashboardScreen = ({ navigation }: any) => {
     }
   }, [dashboardData?.attendance_state, user?.track_live_location]);
 
-  // Permanent fallback to restore manager status if app was cleared without proper logout
+
+
+  // Sync isManager state with the dashboard API to correct any previously bugged state in Redux
   React.useEffect(() => {
-    if (user && !isManager) {
-      dispatch(fetchExpenseApprovals({ limit: 1 }) as any).then((res: any) => {
-        if (res.meta.requestStatus === 'fulfilled') {
-          dispatch(setIsManager(true));
-        }
-      });
+    if (dashboardData && dashboardData.is_manager !== undefined) {
+      if (dashboardData.is_manager !== isManager) {
+        dispatch(setIsManager(dashboardData.is_manager));
+      }
     }
-  }, [user, isManager, dispatch]);
+  }, [dashboardData, isManager, dispatch]);
 
   // Sync any remaining offline data on component mount
   React.useEffect(() => {
@@ -224,7 +225,44 @@ export const DashboardScreen = ({ navigation }: any) => {
           <MetricTile label="Leave Balance" value="0" subtext="days left" />
         </View> */}
 
-        <Text style={styles.sectionTitle}>Shift Details</Text>
+        {/* Manager Actions */}
+        {(isManager || dashboardData?.is_manager) && (
+          <>
+            <Text style={styles.sectionTitle}>Manager Actions</Text>
+            
+            <TouchableOpacity 
+              style={[styles.shiftCard, { marginTop: 4 }]} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('ManagerExpenseListScreen')}
+            >
+              <View style={[styles.shiftIconBox, { backgroundColor: 'rgba(21, 88, 176, 0.1)' }]}>
+                <Icon name="clipboard-check-outline" size={24} color={colors.primary} />
+              </View>
+              <View style={styles.shiftLeft}>
+                <Text style={styles.shiftName}>Team Expenses</Text>
+                <Text style={styles.shiftTime}>Review and approve employee expenses</Text>
+              </View>
+              <Icon name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.shiftCard, { marginTop: 12 }]} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('RegularisationScreen')}
+            >
+              <View style={[styles.shiftIconBox, { backgroundColor: 'rgba(0, 188, 212, 0.1)' }]}>
+                <Icon name="clock-check-outline" size={24} color="#00BCD4" />
+              </View>
+              <View style={styles.shiftLeft}>
+                <Text style={styles.shiftName}>Attendance Regularization</Text>
+                <Text style={styles.shiftTime}>Request to regularize attendance</Text>
+              </View>
+              <Icon name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </>
+        )}
+
+        <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Shift Details</Text>
 
         {/* Current Shift */}
         <View style={styles.shiftCard}>
@@ -260,27 +298,6 @@ export const DashboardScreen = ({ navigation }: any) => {
           </View>
         </View>
         
-        {/* Manager Actions */}
-        {(isManager || dashboardData?.is_manager) && (
-          <>
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Manager Actions</Text>
-            <TouchableOpacity 
-              style={[styles.shiftCard, { marginTop: 4 }]} 
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('ManagerExpenseListScreen')}
-            >
-              <View style={[styles.shiftIconBox, { backgroundColor: 'rgba(21, 88, 176, 0.1)' }]}>
-                <Icon name="clipboard-check-outline" size={24} color={colors.primary} />
-              </View>
-              <View style={styles.shiftLeft}>
-                <Text style={styles.shiftName}>Team Expenses</Text>
-                <Text style={styles.shiftTime}>Review and approve employee expenses</Text>
-              </View>
-              <Icon name="chevron-right" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </>
-        )}
-
         <View style={{ height: 20 }} />
       </ScrollView>
 

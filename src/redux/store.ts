@@ -11,6 +11,8 @@ import payrollReducer from './slice/payrollSlice';
 import trackingReducer from './slice/trackingSlice';
 import expenseReducer from './slice/expenseSlice';
 import birthdayReducer from './slice/birthdaySlice';
+import holidayReducer from './slice/holidaySlice';
+import regularisationReducer from './slice/regularisationSlice';
 const rootReducer = combineReducers({
   auth: getPersistedReducer('auth', authReducer),
   dashboard: dashboardReducer,
@@ -22,6 +24,8 @@ const rootReducer = combineReducers({
   tracking: trackingReducer,
   expense: expenseReducer,
   birthday: birthdayReducer,
+  holiday: holidayReducer,
+  regularisation: regularisationReducer,
 });
 export const store = configureStore({
   reducer: rootReducer,

@@ -70,6 +70,40 @@ export const ExploreScreen = ({ navigation }: any) => {
             <Text style={styles.cardSubtitle}>Upcoming birthdays</Text>
           </TouchableOpacity>
 
+          {/* Public Holidays Card */}
+          <TouchableOpacity 
+            style={[styles.gridCard, { borderLeftColor: '#9C27B0' }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              navigation.navigate('PublicHolidaysScreen');
+            }}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, { backgroundColor: '#9C27B020' }]}>
+                <Icon name="calendar-star" size={24} color="#9C27B0" />
+              </View>
+            </View>
+            <Text style={styles.cardTitle}>Public Holidays</Text>
+            <Text style={styles.cardSubtitle}>List of public holidays</Text>
+          </TouchableOpacity>
+
+          {/* Attendance Regularization Card */}
+          <TouchableOpacity 
+            style={[styles.gridCard, { borderLeftColor: '#00BCD4' }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              navigation.navigate('RegularisationScreen');
+            }}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, { backgroundColor: '#00BCD420' }]}>
+                <Icon name="clock-check-outline" size={24} color="#00BCD4" />
+              </View>
+            </View>
+            <Text style={styles.cardTitle}>Regularization</Text>
+            <Text style={styles.cardSubtitle}>Regularize attendance</Text>
+          </TouchableOpacity>
+
         </View>
       </ScrollView>
     </SafeAreaView>
