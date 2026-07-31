@@ -20,6 +20,11 @@ interface LeaveState {
   cancelLoading: boolean;
   cancelError: string | null;
   cancelSuccess: boolean;
+  approvalsData: any | null;
+  approvalsLoading: boolean;
+  approvalsError: string | null;
+  actionLoading: boolean;
+  actionError: string | null;
 }
 
 const initialState: LeaveState = {
@@ -41,6 +46,11 @@ const initialState: LeaveState = {
   cancelLoading: false,
   cancelError: null,
   cancelSuccess: false,
+  approvalsData: null,
+  approvalsLoading: false,
+  approvalsError: null,
+  actionLoading: false,
+  actionError: null,
 };
 
 export const fetchLeaveBalances = createAsyncThunk(
@@ -117,6 +127,41 @@ export const cancelLeave = createAsyncThunk(
     } catch (error: any) {
       console.log('Cancel Leave Error:', error?.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || 'Failed to cancel leave');
+    }
+  }
+);
+export const fetchManagerLeaveApprovals = createAsyncThunk(
+  'leave/fetchManagerLeaveApprovals',
+  async (params: { status?: string; page?: number; limit?: number } | void, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/leave/approvals', { params });
+      return response.data.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch manager leave approvals');
+    }
+  }
+);
+
+export const approveManagerLeave = createAsyncThunk(
+  'leave/approveManagerLeave',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/leave/approvals/${id}/approve`);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to approve leave');
+    }
+  }
+);
+
+export const refuseManagerLeave = createAsyncThunk(
+  'leave/refuseManagerLeave',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/leave/approvals/${id}/refuse`);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to refuse leave');
     }
   }
 );
@@ -225,6 +270,41 @@ const leaveSlice = createSlice({
       .addCase(cancelLeave.rejected, (state, action) => {
         state.cancelLoading = false;
         state.cancelError = action.payload as string;
+      })
+      // Manager Leave Approvals
+      .addCase(fetchManagerLeaveApprovals.pending, (state) => {
+        state.approvalsLoading = true;
+        state.approvalsError = null;
+      })
+      .addCase(fetchManagerLeaveApprovals.fulfilled, (state, action) => {
+        state.approvalsLoading = false;
+        state.approvalsData = action.payload;
+      })
+      .addCase(fetchManagerLeaveApprovals.rejected, (state, action) => {
+        state.approvalsLoading = false;
+        state.approvalsError = action.payload as string;
+      })
+      .addCase(approveManagerLeave.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(approveManagerLeave.fulfilled, (state) => {
+        state.actionLoading = false;
+      })
+      .addCase(approveManagerLeave.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload as string;
+      })
+      .addCase(refuseManagerLeave.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(refuseManagerLeave.fulfilled, (state) => {
+        state.actionLoading = false;
+      })
+      .addCase(refuseManagerLeave.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload as string;
       });
   },
 });

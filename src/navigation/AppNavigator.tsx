@@ -34,6 +34,12 @@ import { PayslipListScreen } from '../screens/PayslipListScreen';
 import { UpcomingBirthdaysScreen } from '../screens/UpcomingBirthdaysScreen';
 import { PublicHolidaysScreen } from '../screens/PublicHolidaysScreen';
 
+import { ManagerRegularisationListScreen } from '../screens/ManagerRegularisationListScreen';
+import { ManagerRegularisationDetailScreen } from '../screens/ManagerRegularisationDetailScreen';
+import { ManagerLeaveListScreen } from '../screens/ManagerLeaveListScreen';
+import { ManagerLeaveDetailScreen } from '../screens/ManagerLeaveDetailScreen';
+import { MyRegularisationListScreen } from '../screens/MyRegularisationListScreen';
+
 const Stack = createNativeStackNavigator();
 
 export const AppNavigator = () => {
@@ -71,6 +77,7 @@ export const AppNavigator = () => {
         <Stack.Screen name="PunchInScreen" component={PunchInScreen} />
         <Stack.Screen name="LiveTrackingScreen" component={LiveTrackingScreen} />
         <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
+        <Stack.Screen name="MyRegularisationListScreen" component={MyRegularisationListScreen} />
         <Stack.Screen name="RegularisationScreen" component={RegularisationScreen} />
         <Stack.Screen name="ApplyLeaveScreen" component={ApplyLeaveScreen} />
         <Stack.Screen name="LeaveDetailScreen" component={LeaveDetailScreen} />
@@ -84,6 +91,10 @@ export const AppNavigator = () => {
         <Stack.Screen name="AddExpenseScreen" component={AddExpenseScreen} />
         <Stack.Screen name="ManagerExpenseListScreen" component={ManagerExpenseListScreen} />
         <Stack.Screen name="ManagerExpenseDetailScreen" component={ManagerExpenseDetailScreen} />
+        <Stack.Screen name="ManagerRegularisationListScreen" component={ManagerRegularisationListScreen} />
+        <Stack.Screen name="ManagerRegularisationDetailScreen" component={ManagerRegularisationDetailScreen} />
+        <Stack.Screen name="ManagerLeaveListScreen" component={ManagerLeaveListScreen} />
+        <Stack.Screen name="ManagerLeaveDetailScreen" component={ManagerLeaveDetailScreen} />
         <Stack.Screen name="PayslipListScreen" component={PayslipListScreen} />
         <Stack.Screen name="UpcomingBirthdaysScreen" component={UpcomingBirthdaysScreen} />
         <Stack.Screen name="PublicHolidaysScreen" component={PublicHolidaysScreen} />

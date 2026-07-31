@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Animated, BackHandler } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Animated, BackHandler, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppText as Text } from '../components/AppText';
 import { CustomAlertModal } from '../components/CustomAlertModal';
@@ -248,14 +248,29 @@ export const DashboardScreen = ({ navigation }: any) => {
             <TouchableOpacity 
               style={[styles.shiftCard, { marginTop: 12 }]} 
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('RegularisationScreen')}
+              onPress={() => navigation.navigate('ManagerRegularisationListScreen')}
             >
               <View style={[styles.shiftIconBox, { backgroundColor: 'rgba(0, 188, 212, 0.1)' }]}>
                 <Icon name="clock-check-outline" size={24} color="#00BCD4" />
               </View>
               <View style={styles.shiftLeft}>
                 <Text style={styles.shiftName}>Attendance Regularization</Text>
-                <Text style={styles.shiftTime}>Request to regularize attendance</Text>
+                <Text style={styles.shiftTime}>Review and approve employee regularizations</Text>
+              </View>
+              <Icon name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.shiftCard, { marginTop: 12 }]} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('ManagerLeaveListScreen')}
+            >
+              <View style={[styles.shiftIconBox, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
+                <Icon name="calendar-check-outline" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.shiftLeft}>
+                <Text style={styles.shiftName}>Leave Approval</Text>
+                <Text style={styles.shiftTime}>Review and approve employee leaves</Text>
               </View>
               <Icon name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>

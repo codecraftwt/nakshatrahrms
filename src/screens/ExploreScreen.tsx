@@ -92,7 +92,7 @@ export const ExploreScreen = ({ navigation }: any) => {
             style={[styles.gridCard, { borderLeftColor: '#00BCD4' }]}
             activeOpacity={0.8}
             onPress={() => {
-              navigation.navigate('RegularisationScreen');
+              navigation.navigate('MyRegularisationListScreen');
             }}
           >
             <View style={styles.cardHeader}>
