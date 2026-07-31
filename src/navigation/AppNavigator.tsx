@@ -31,6 +31,7 @@ import { AddExpenseScreen } from '../screens/AddExpenseScreen';
 import { ManagerExpenseListScreen } from '../screens/ManagerExpenseListScreen';
 import { ManagerExpenseDetailScreen } from '../screens/ManagerExpenseDetailScreen';
 import { PayslipListScreen } from '../screens/PayslipListScreen';
+import { PayslipDetailScreen } from '../screens/PayslipDetailScreen';
 import { UpcomingBirthdaysScreen } from '../screens/UpcomingBirthdaysScreen';
 import { PublicHolidaysScreen } from '../screens/PublicHolidaysScreen';
 
@@ -96,6 +97,7 @@ export const AppNavigator = () => {
         <Stack.Screen name="ManagerLeaveListScreen" component={ManagerLeaveListScreen} />
         <Stack.Screen name="ManagerLeaveDetailScreen" component={ManagerLeaveDetailScreen} />
         <Stack.Screen name="PayslipListScreen" component={PayslipListScreen} />
+        <Stack.Screen name="PayslipDetailScreen" component={PayslipDetailScreen} />
         <Stack.Screen name="UpcomingBirthdaysScreen" component={UpcomingBirthdaysScreen} />
         <Stack.Screen name="PublicHolidaysScreen" component={PublicHolidaysScreen} />
       </Stack.Navigator>

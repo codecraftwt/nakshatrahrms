@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -7,8 +7,13 @@ import { ThemeColors } from '../theme/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
-import { fetchPayslips, fetchPayslipDetails } from '../redux/slice/payrollSlice';
+import { fetchPayslips } from '../redux/slice/payrollSlice';
 import { useFocusEffect } from '@react-navigation/native';
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
 export const PayslipListScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -16,12 +21,10 @@ export const PayslipListScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch<AppDispatch>();
 
-  const { payslipsData, payslipsLoading, payslipDetailsLoading } = useSelector((state: RootState) => state.payroll);
+  const { payslipsData, payslipsLoading } = useSelector((state: RootState) => state.payroll);
 
-  // Default to July 2026 as per user example, or current date if needed.
-  // We'll use 7 and 2026 as default to ensure it matches the user's curl if that's the only data they have.
-  const [month, setMonth] = useState(7);
-  const [year, setYear] = useState(2026);
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
 
   useFocusEffect(
     useCallback(() => {
@@ -29,46 +32,61 @@ export const PayslipListScreen = ({ navigation }: any) => {
     }, [dispatch, month, year])
   );
 
-  const handleDownloadPress = async (item: any) => {
-    try {
-      const action = await dispatch(fetchPayslipDetails(item.id));
-      if (fetchPayslipDetails.fulfilled.match(action)) {
-        Alert.alert('Success', 'Payslip details fetched successfully!');
-        console.log('Payslip detail payload:', action.payload);
-      } else {
-        Alert.alert('Error', 'Failed to fetch payslip details.');
-      }
-    } catch (error) {
-      console.log('Download error:', error);
+  const handlePrevMonth = () => {
+    if (month > 1) {
+      setMonth(m => m - 1);
+    } else {
+      setMonth(12);
+      setYear(y => y - 1);
     }
   };
 
+  const handleNextMonth = () => {
+    if (month < 12) {
+      setMonth(m => m + 1);
+    } else {
+      setMonth(1);
+      setYear(y => y + 1);
+    }
+  };
+
+  const handlePayslipPress = (item: any) => {
+    navigation.navigate('PayslipDetailScreen', { id: item.id });
+  };
+
   const renderPayslipItem = (item: any, index: number) => {
-    const name = item.name || `Payslip ${item.id || index}`;
+    const name = item.name || `Payslip #${item.id || index}`;
     const employeeName = Array.isArray(item.employee_id) ? item.employee_id[1] : item.employee_id?.name || 'Employee';
-    const amount = item.net_wage || item.total_amount || 0;
+    const amount = item.net_amount || item.net_wage || item.total_amount || 0;
     const date = item.date_to || item.date_from || '';
 
     return (
-      <View key={item.id || index} style={styles.listCard}>
-        <View style={styles.iconContainer}>
-          <Icon name="file-document-outline" size={24} color={colors.primary} />
+      <TouchableOpacity 
+        key={item.id || index} 
+        style={styles.cardContainer}
+        activeOpacity={0.7}
+        onPress={() => handlePayslipPress(item)}
+      >
+        <View style={styles.cardTopRow}>
+          <View style={styles.iconWrapper}>
+            <Icon name="file-document" size={26} color={colors.primary} />
+          </View>
+          <View style={styles.cardTextContent}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{name}</Text>
+            <Text style={styles.cardSubtitle}>{employeeName}</Text>
+            {date ? <Text style={styles.cardDate}>{date}</Text> : null}
+          </View>
         </View>
-        <View style={styles.listTextContainer}>
-          <Text style={styles.itemTitle} numberOfLines={1}>{name}</Text>
-          <Text style={styles.itemSub}>{employeeName} · {date}</Text>
+        
+        <View style={styles.cardDivider} />
+        
+        <View style={styles.cardBottomRow}>
+          <Text style={styles.viewPdfText}>View Payslip PDF</Text>
+          <View style={styles.arrowIconWrapper}>
+            <Icon name="arrow-right" size={16} color="#FFFFFF" />
+          </View>
         </View>
-        <View style={styles.rightContent}>
-          <Text style={styles.amountText}>${amount}</Text>
-          <TouchableOpacity 
-            style={styles.downloadBtn}
-            onPress={() => handleDownloadPress(item)}
-            disabled={payslipDetailsLoading}
-          >
-            <Icon name="download" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -82,31 +100,40 @@ export const PayslipListScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Month: {month}/{year}</Text>
-          <View style={styles.monthControls}>
-            <TouchableOpacity onPress={() => setMonth(m => m > 1 ? m - 1 : 12)}>
-              <Icon name="chevron-left" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setMonth(m => m < 12 ? m + 1 : 1)}>
-              <Icon name="chevron-right" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
+        
+        {/* Modern Month/Year Selector */}
+        <View style={styles.monthSelectorContainer}>
+          <TouchableOpacity onPress={handlePrevMonth} style={styles.monthArrowBtn}>
+            <Icon name="chevron-left" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={styles.monthTextContainer}>
+            <Icon name="calendar-month-outline" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={styles.monthText}>{MONTH_NAMES[month - 1]} {year}</Text>
           </View>
+          <TouchableOpacity onPress={handleNextMonth} style={styles.monthArrowBtn}>
+            <Icon name="chevron-right" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.listContainer}>
           {payslipsLoading ? (
-            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : payslipsData?.data?.length > 0 ? (
+            payslipsData.data.map(renderPayslipItem)
           ) : payslipsData?.records?.length > 0 ? (
             payslipsData.records.map(renderPayslipItem)
           ) : payslipsData?.length > 0 ? (
             payslipsData.map(renderPayslipItem)
           ) : (
-            <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No payslips found.</Text>
+            <View style={styles.emptyStateContainer}>
+              <Icon name="file-document-remove-outline" size={64} color={colors.textSecondary + '40'} />
+              <Text style={styles.emptyStateTitle}>No Payslips Found</Text>
+              <Text style={styles.emptyStateSub}>There are no payslips available for {MONTH_NAMES[month - 1]} {year}.</Text>
+            </View>
           )}
         </View>
         
-        <View style={{ height: 20 + insets.bottom }} />
+        <View style={{ height: 40 + insets.bottom }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -115,96 +142,169 @@ export const PayslipListScreen = ({ navigation }: any) => {
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: '#F8F9FA', // A softer, premium background color
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   backBtn: {
     marginRight: 16,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: 20,
   },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
+  monthSelectorContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    marginHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 100,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  monthArrowBtn: {
+    padding: 8,
+    backgroundColor: '#F0F4F8',
+    borderRadius: 24,
+  },
+  monthTextContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
+  monthText: {
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
-  },
-  monthControls: {
-    flexDirection: 'row',
-    gap: 16,
   },
   listContainer: {
     paddingHorizontal: 20,
   },
-  listCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cardContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.bgSurface,
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  listTextContainer: {
+  cardTextContent: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 12,
   },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  itemSub: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  rightContent: {
-    alignItems: 'flex-end',
-  },
-  amountText: {
+  cardTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 6,
+    lineHeight: 22,
   },
-  downloadBtn: {
-    padding: 8,
-    backgroundColor: colors.bgSurface,
-    borderRadius: 8,
+  cardSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  cardDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  amountWrapper: {
+    alignItems: 'flex-end',
+  },
+  amountText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  netPayBadge: {
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  netPayLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  viewPdfText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  arrowIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSub: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 20,
   },
 });
