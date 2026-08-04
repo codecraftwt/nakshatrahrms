@@ -138,10 +138,15 @@ export const AttendanceScreen = ({ navigation }: any) => {
         // Fallback simple logic
         const dayOfWeek = new Date(year, month, d).getDay();
         if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          if (new Date(year, month, d) < today) {
+          if (cellDate < todayMidnight) {
             status = 'absent';
           }
         }
+      }
+
+      // Ensure today is marked as present if the user has punched in today
+      if (isToday && (statusData?.has_punched_in_today || todayData?.id || statusData?.has_punched_out_today)) {
+        status = 'present';
       }
 
       // cells.push(
