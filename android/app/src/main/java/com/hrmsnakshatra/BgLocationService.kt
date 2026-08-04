@@ -228,7 +228,7 @@ class BgLocationService : Service() {
       NotificationChannel(
         CHANNEL_ID,
         "Background location tracking",
-        NotificationManager.IMPORTANCE_DEFAULT,
+        NotificationManager.IMPORTANCE_HIGH,
       ).apply {
         description = "Tracks route in background"
         setSound(null, null)
@@ -260,7 +260,8 @@ class BgLocationService : Service() {
       .setContentText("Background route tracking is active")
       .setOngoing(true)
       .setOnlyAlertOnce(true)
-      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setPriority(NotificationCompat.PRIORITY_MAX)
+      .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setContentIntent(pendingIntent)
       .build()
   }

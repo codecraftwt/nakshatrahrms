@@ -43,7 +43,7 @@ let lastSyncAttemptTime = 0;
 const retryCounts = new Map<string, number>(); // track retry attempts per offline point id
 let hasShownBatteryPrompt = false; // track if we already showed the battery alert this session
 
-const { PipModule } = NativeModules;
+const { PipModule, BgLocationModule } = NativeModules;
 
 export type LocationListener = (lat: number, lng: number) => void;
 const listeners = new Set<LocationListener>();
@@ -500,6 +500,25 @@ const trackingTask = async (taskDataArguments: any): Promise<void> => {
       );
     }
 
+    // Process native buffered points (solves "straight line" when screen is off)
+    if (Platform.OS === 'android' && BgLocationModule?.getBufferedPoints) {
+      try {
+        const points = await BgLocationModule.getBufferedPoints();
+        if (points && points.length > 0) {
+          console.log(`[LocationService] Processing ${points.length} native buffered points...`);
+          for (const pt of points) {
+            await handleLocationUpdate({
+              coords: { latitude: pt.latitude, longitude: pt.longitude, accuracy: pt.accuracy ?? 10 },
+              timestamp: pt.timestamp,
+            });
+          }
+          await BgLocationModule.clearBufferedPoints();
+        }
+      } catch (e) {
+        console.warn('[LocationService] Failed to process native buffered points:', e);
+      }
+    }
+
     await sleep(delay);
 
     // Fallback: if watchPosition goes completely silent for > 60 seconds, try to kickstart it
@@ -916,6 +935,9 @@ export const LocationService = {
 
     try {
       await BackgroundService.start(trackingTask, serviceOptions);
+      if (BgLocationModule?.startService) {
+        await BgLocationModule.startService();
+      }
       console.log('[LocationService] Android: foreground service started');
     } catch (e) {
       console.warn('[LocationService] Android: failed to start foreground service:', e);
@@ -962,6 +984,9 @@ export const LocationService = {
       // before we forcefully destroy the Android Service context.
       await new Promise<void>((resolve) => setTimeout(resolve, 100));
       await BackgroundService.stop();
+      if (BgLocationModule?.stopService) {
+        await BgLocationModule.stopService();
+      }
       console.log('[LocationService] Android: foreground service stopped');
     } catch (e) {
       console.warn('[LocationService] Android: failed to stop foreground service:', e);

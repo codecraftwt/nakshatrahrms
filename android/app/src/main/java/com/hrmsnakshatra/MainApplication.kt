@@ -45,7 +45,7 @@ class MainApplication : Application(), ReactApplication {
       val channel = NotificationChannel(
         "rn_background_actions",
         "Location Tracking",
-        NotificationManager.IMPORTANCE_LOW  // LOW = no sound, no popup — suitable for ongoing tracking
+        NotificationManager.IMPORTANCE_HIGH  // HIGH = prominent popup, suitable for forceful ongoing tracking
       ).apply {
         description = "Shows while your location is being tracked for attendance."
         setShowBadge(false)
