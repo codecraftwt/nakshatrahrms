@@ -18,6 +18,9 @@ interface AttendanceState {
   punchInError: string | null;
   punchOutLoading: boolean;
   punchOutError: string | null;
+  geoFencingData: any | null;
+  geoFencingLoading: boolean;
+  geoFencingError: string | null;
 }
 
 const initialState: AttendanceState = {
@@ -37,6 +40,9 @@ const initialState: AttendanceState = {
   punchInError: null,
   punchOutLoading: false,
   punchOutError: null,
+  geoFencingData: null,
+  geoFencingLoading: false,
+  geoFencingError: null,
 };
 
 export const fetchTodayAttendance = createAsyncThunk(
@@ -93,7 +99,7 @@ export const fetchAttendanceSummary = createAsyncThunk(
 
 export const postPunchIn = createAsyncThunk(
   'attendance/postPunchIn',
-  async (data: { lat: number; lng: number; selfie: string; timestamp: string; In_remarks?: string }, { rejectWithValue }) => {
+  async (data: { lat: number; lng: number; selfie: string; timestamp: string; in_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-in', data);
       return response.data;
@@ -106,13 +112,26 @@ export const postPunchIn = createAsyncThunk(
 
 export const postPunchOut = createAsyncThunk(
   'attendance/postPunchOut',
-  async (data: { lat: number; lng: number; selfie: string; timestamp: string; out_remarks?: string }, { rejectWithValue }) => {
+  async (data: { attendance_id: number; lat: number; lng: number; selfie: string; timestamp: string; out_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-out', data);
       return response.data;
     } catch (error: any) {
       console.log('Punch Out Error:', error?.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || 'Failed to punch out');
+    }
+  }
+);
+
+export const fetchGeoFencing = createAsyncThunk(
+  'attendance/fetchGeoFencing',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/employee/geo-fencing');
+      return response.data;
+    } catch (error: any) {
+      console.log('Geo-Fencing Error:', error?.response?.data || error.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch geo-fencing data');
     }
   }
 );
@@ -130,6 +149,8 @@ const attendanceSlice = createSlice({
       state.historyError = null;
       state.summaryData = null;
       state.summaryError = null;
+      state.geoFencingData = null;
+      state.geoFencingError = null;
     },
   },
   extraReducers: (builder) => {
@@ -209,6 +230,19 @@ const attendanceSlice = createSlice({
       .addCase(postPunchOut.rejected, (state, action) => {
         state.punchOutLoading = false;
         state.punchOutError = action.payload as string;
+      })
+      // Geo Fencing
+      .addCase(fetchGeoFencing.pending, (state) => {
+        state.geoFencingLoading = true;
+        state.geoFencingError = null;
+      })
+      .addCase(fetchGeoFencing.fulfilled, (state, action) => {
+        state.geoFencingLoading = false;
+        state.geoFencingData = action.payload?.data || action.payload;
+      })
+      .addCase(fetchGeoFencing.rejected, (state, action) => {
+        state.geoFencingLoading = false;
+        state.geoFencingError = action.payload as string;
       });
   },
 });

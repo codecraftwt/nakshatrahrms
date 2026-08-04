@@ -13,13 +13,14 @@ import { MetricTile } from '../components/MetricTile';
 import { mockUser, mockDashboard } from '../data/mockData';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchDashboardSummary } from '../redux/slice/dashboardSlice';
+import { fetchAttendanceStatus } from '../redux/slice/attendanceSlice';
 
 import { setIsManager } from '../redux/slice/authSlice';
 import { fetchExpenseApprovals } from '../redux/slice/expenseSlice';
 import { LocationService } from '../services/LocationService';
 import { fetchCurrentShift, fetchAssignedShift } from '../redux/slice/shiftSlice';
 import { fetchPayrollShiftDetails } from '../redux/slice/payrollSlice';
-import { fetchLiveKm, fetchDailyKm, fetchKmSummary } from '../redux/slice/trackingSlice';
+import { fetchLiveKm, fetchDailyKm, fetchKmSummary, fetchRouteData } from '../redux/slice/trackingSlice';
 import { RootState, AppDispatch } from '../redux/store';
 
 export const DashboardScreen = ({ navigation }: any) => {
@@ -30,10 +31,20 @@ export const DashboardScreen = ({ navigation }: any) => {
 
   const dispatch = useDispatch<AppDispatch>();
   const { data: dashboardData, loading } = useSelector((state: RootState) => state.dashboard);
+  const { statusData } = useSelector((state: RootState) => state.attendance);
   const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
-  const { liveKmData, kmSummaryData } = useSelector((state: RootState) => state.tracking);
+  const { liveKmData, kmSummaryData, routeData } = useSelector((state: RootState) => state.tracking);
   const { user, isManager } = useSelector((state: RootState) => state.auth);
   const [exitModalVisible, setExitModalVisible] = React.useState(false);
+
+  const sessions = routeData?.attendance_sessions || [];
+  const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
+  const isTrackingActive = !!sessions.find((s: any) => !s.attendance?.check_out);
+
+  const isCheckedIn = dashboardData?.attendance_state === 'checked_in' || 
+                      dashboardData?.can_punch_out || 
+                      (statusData?.has_punched_in_today && !statusData?.has_punched_out_today) ||
+                      isTrackingActive;
 
   const formatTime = (time: number | undefined) => {
     if (time === undefined || time === null) return '';
@@ -66,6 +77,7 @@ export const DashboardScreen = ({ navigation }: any) => {
   useFocusEffect(
     useCallback(() => {
       dispatch(fetchDashboardSummary());
+      dispatch(fetchAttendanceStatus());
       dispatch(fetchCurrentShift());
       dispatch(fetchAssignedShift());
       dispatch(fetchPayrollShiftDetails());
@@ -74,6 +86,9 @@ export const DashboardScreen = ({ navigation }: any) => {
       // Fetch today's daily KM as a baseline
       const today = new Date().toISOString().split('T')[0];
       dispatch(fetchDailyKm(today));
+      
+      // Fetch Route Data to get active sessions reliably
+      dispatch(fetchRouteData(today));
       
       // Fetch KM Summary for the dashboard metric tiles
       dispatch(fetchKmSummary('today,month'));
@@ -170,15 +185,15 @@ export const DashboardScreen = ({ navigation }: any) => {
             <Text style={styles.punchDate}>Today, {dashboardData?.date || ''}</Text>
             <View style={styles.badgeContainer}>
               <Icon name="clock-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.badgeText}>{dashboardData?.attendance_state === 'checked_in' ? 'Working' : 'Pending'}</Text>
+              <Text style={styles.badgeText}>{isCheckedIn ? 'Working' : 'Pending'}</Text>
             </View>
           </View>
 
           <Text style={styles.punchStatus}>
-            {dashboardData?.attendance_state === 'checked_in' ? 'Currently Punched In' : 'Ready for work?'}
+            {isCheckedIn ? 'Currently Punched In' : 'Ready for work?'}
           </Text>
           <Text style={styles.punchSubStatus}>
-            {dashboardData?.attendance_state === 'checked_in' 
+            {isCheckedIn 
               ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.` 
               : "You haven't punched in yet today."}
           </Text>
@@ -188,7 +203,7 @@ export const DashboardScreen = ({ navigation }: any) => {
               style={styles.punchBtn}
               activeOpacity={0.9}
               onPress={() => {
-                if (dashboardData?.attendance_state === 'checked_in' || dashboardData?.can_punch_out) {
+                if (isCheckedIn) {
                   navigation.navigate('LiveTrackingScreen');
                 } else {
                   navigation.navigate('PunchInScreen');
@@ -197,7 +212,7 @@ export const DashboardScreen = ({ navigation }: any) => {
             >
               <Icon name="fingerprint" size={20} color={colors.punchBtnText} style={styles.punchBtnIcon} />
               <Text style={styles.punchBtnText}>
-                {dashboardData?.can_punch_out ? 'Punch out now' : 'Punch in now'}
+                {isCheckedIn ? 'Punch out now' : 'Punch in now'}
               </Text>
             </TouchableOpacity>
           </Animated.View>

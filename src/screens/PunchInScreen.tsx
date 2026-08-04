@@ -13,7 +13,8 @@ import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import { LocationService } from '../services/LocationService';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
-import { postPunchIn } from '../redux/slice/attendanceSlice';
+import { postPunchIn, fetchGeoFencing } from '../redux/slice/attendanceSlice';
+import { getDistanceInMeters } from '../utils/distance';
 import Geolocation from 'react-native-geolocation-service';
 import { ActivityIndicator } from 'react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
@@ -23,6 +24,7 @@ export const PunchInScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { geoFencingData } = useSelector((state: RootState) => state.attendance);
   const isLiveTrackingDisabled = user?.track_live_location === false;
   
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -43,6 +45,10 @@ export const PunchInScreen = ({ navigation }: any) => {
     type: 'info',
   });
 
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [distanceToNearest, setDistanceToNearest] = useState<number | null>(null);
+  const [nearestLocationInfo, setNearestLocationInfo] = useState<{name: string, latitude: number, longitude: number} | null>(null);
+
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'error', onPrimaryPress?: () => void) => {
     setAlertConfig({ visible: true, title, message, type, onPrimaryPress });
   };
@@ -58,6 +64,54 @@ export const PunchInScreen = ({ navigation }: any) => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    dispatch(fetchGeoFencing());
+
+    const fetchLocation = async () => {
+      try {
+        const gpsEnabled = await LocationService.isLocationServicesEnabled();
+        if (!gpsEnabled) return;
+        
+        const hasPermission = await LocationService.requestPermissions();
+        if (!hasPermission) return;
+
+        Geolocation.getCurrentPosition(
+          (position) => {
+            setCurrentLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            });
+          },
+          (error) => {
+            console.log('Map location error', error);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      } catch (err) {
+         console.warn(err);
+      }
+    };
+    fetchLocation();
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (currentLocation && geoFencingData?.locations && geoFencingData.locations.length > 0) {
+      let minDistance = Infinity;
+      let nearestLoc = null;
+
+      geoFencingData.locations.forEach((loc: any) => {
+        const d = getDistanceInMeters(currentLocation.lat, currentLocation.lng, loc.latitude, loc.longitude);
+        if (d < minDistance) {
+          minDistance = d;
+          nearestLoc = loc;
+        }
+      });
+
+      setDistanceToNearest(minDistance);
+      setNearestLocationInfo(nearestLoc);
+    }
+  }, [currentLocation, geoFencingData]);
 
   const takeSelfie = async () => {
     if (Platform.OS === 'android') {
@@ -146,13 +200,38 @@ export const PunchInScreen = ({ navigation }: any) => {
       // ── Step 3: Get High-Accuracy GPS location ───────────────────────────────
       const position = await LocationService.getAccurateLocation();
 
+      // ── Step 3.5: Geo Fencing Validation ───────────────────────────────────────
+      if (geoFencingData?.geo_fencing && geoFencingData.locations && geoFencingData.locations.length > 0) {
+        let isWithinRange = false;
+        let minDist = Infinity;
+        let nearestLocName = 'an office';
+        
+        for (const loc of geoFencingData.locations) {
+          const d = getDistanceInMeters(position.coords.latitude, position.coords.longitude, loc.latitude, loc.longitude);
+          if (d < minDist) {
+            minDist = d;
+            nearestLocName = loc.name;
+          }
+          if (d <= 50) {
+            isWithinRange = true;
+            break;
+          }
+        }
+        
+        if (!isWithinRange) {
+          showAlert('Outside Geo-Fence', `You are not able to punch in. If you want to punch in, go near ${nearestLocName}.`);
+          setLoading(false);
+          return;
+        }
+      }
+
       // ── Step 4: Send punch-in to server ──────────────────────────────────────
       const payload = {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
         selfie: currentSelfieBase64,
         timestamp: new Date().toISOString(),
-        In_remarks: inRemarks,
+        in_remarks: inRemarks,
       };
 
       try {
@@ -195,9 +274,13 @@ export const PunchInScreen = ({ navigation }: any) => {
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Punch in</Text>
-        <View style={styles.inRangeBadge}>
-          <Text style={styles.inRangeText}>In range</Text>
-        </View>
+        {geoFencingData?.geo_fencing && distanceToNearest !== null && (
+          <View style={[styles.inRangeBadge, distanceToNearest > 50 ? { backgroundColor: colors.dangerBg } : undefined]}>
+            <Text style={[styles.inRangeText, distanceToNearest > 50 ? { color: colors.danger } : undefined]}>
+              {distanceToNearest <= 50 ? 'In range' : 'Out of range'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {isLiveTrackingDisabled && (
@@ -237,12 +320,22 @@ export const PunchInScreen = ({ navigation }: any) => {
               <Icon name="map-marker-outline" size={20} color={colors.primary} />
             </View>
             <View style={styles.locationInfo}>
-              <Text style={styles.locationTitle}>HQ Office</Text>
-              <Text style={styles.locationSub}>19.0760° N, 72.8777° E</Text>
+              <Text style={styles.locationTitle}>
+                {geoFencingData?.geo_fencing 
+                  ? (nearestLocationInfo ? nearestLocationInfo.name : 'Checking location...')
+                  : (nearestLocationInfo ? nearestLocationInfo.name : 'Anywhere (Geo-fencing disabled)')}
+              </Text>
+              <Text style={styles.locationSub}>
+                {nearestLocationInfo ? `${nearestLocationInfo.latitude.toFixed(4)}° N, ${nearestLocationInfo.longitude.toFixed(4)}° E` : ''}
+              </Text>
             </View>
-            <View style={styles.distanceBadge}>
-              <Text style={styles.distanceText}>Within 200m</Text>
-            </View>
+            {geoFencingData?.geo_fencing && distanceToNearest !== null && (
+              <View style={[styles.distanceBadge, distanceToNearest > 50 ? { backgroundColor: colors.dangerBg } : undefined]}>
+                <Text style={[styles.distanceText, distanceToNearest > 50 ? { color: colors.danger } : undefined]}>
+                  {distanceToNearest <= 50 ? 'Within 50m' : `${Math.round(distanceToNearest)}m away`}
+                </Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.divider} />

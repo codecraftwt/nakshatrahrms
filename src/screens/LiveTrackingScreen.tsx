@@ -15,8 +15,9 @@ import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import { ActivityIndicator } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
-import { postPunchOut } from '../redux/slice/attendanceSlice';
+import { postPunchOut, fetchGeoFencing } from '../redux/slice/attendanceSlice';
 import { fetchLiveKm, fetchKmSummary, fetchRouteData } from '../redux/slice/trackingSlice';
+import { getDistanceInMeters } from '../utils/distance';
 import Geolocation from 'react-native-geolocation-service';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { usePipMode } from '../hooks/usePipMode';
@@ -30,12 +31,15 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { liveKmData, kmSummaryData, routeData } = useSelector((state: RootState) => state.tracking);
+  const { data: dashboardData } = useSelector((state: RootState) => state.dashboard);
+  const { statusData, todayData, geoFencingData } = useSelector((state: RootState) => state.attendance);
   const [isMapExpanded, setIsMapExpanded] = React.useState(false);
   const [routeCoordinates, setRouteCoordinates] = React.useState<{latitude: number, longitude: number}[]>([]);
   const mapRef = React.useRef<MapView>(null);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
+    dispatch(fetchGeoFencing());
     dispatch(fetchLiveKm());
     dispatch(fetchKmSummary('today,month'));
     const today = new Date().toISOString().split('T')[0];
@@ -269,10 +273,55 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
       try {
         const position = await LocationService.getAccurateLocation();
+        
+        // ── Geo Fencing Validation for Punch Out ──────────────────────────────────
+        if (geoFencingData?.geo_fencing && geoFencingData.locations && geoFencingData.locations.length > 0) {
+          let isWithinRange = false;
+          let minDist = Infinity;
+          let nearestLocName = 'an office';
+          
+          for (const loc of geoFencingData.locations) {
+            const d = getDistanceInMeters(position.coords.latitude, position.coords.longitude, loc.latitude, loc.longitude);
+            if (d < minDist) {
+              minDist = d;
+              nearestLocName = loc.name;
+            }
+            if (d <= 50) {
+              isWithinRange = true;
+              break;
+            }
+          }
+          
+          if (!isWithinRange) {
+            showAlert('Outside Geo-Fence', `You are not able to punch out. If you want to punch out, go near ${nearestLocName}.`);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        const sessions = routeData?.attendance_sessions || [];
+        const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
+        
+        // Comprehensive fallback for attendance_id since routeData may not have it instantly
+        const attendanceId = ongoingSession?.attendance_id || 
+                             ongoingSession?.attendance?.id || 
+                             dashboardData?.attendance_id || 
+                             dashboardData?.id || 
+                             statusData?.attendance_id ||
+                             statusData?.id ||
+                             todayData?.id;
+
+        if (!attendanceId) {
+          showAlert('Error', 'Could not determine active attendance session for punch out. Please wait a moment and try again.');
+          setLoading(false);
+          return;
+        }
+
         const payload = {
+          attendance_id: attendanceId,
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-          selfie: base64Selfie,
+          selfie: base64Selfie as string,
           timestamp: new Date().toISOString(),
           out_remarks: outRemarks,
         };
