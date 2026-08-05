@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator,BackHandler  } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator, BackHandler, Modal, Pressable } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +26,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const { historyData } = useSelector((state: RootState) => state.attendance);
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
   const mapRef = useRef<any>(null);
 
 
@@ -52,9 +53,26 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
   useFocusEffect(
     React.useCallback(() => {
+      let intervalId: NodeJS.Timeout;
+
       if (dateParam) {
+        // Initial fetch
         dispatch(fetchRouteData(dateParam));
+
+        // Setup polling if viewing today's date
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+
+        if (dateParam === todayStr) {
+          intervalId = setInterval(() => {
+            dispatch(fetchRouteData(dateParam));
+          }, 10000); // Poll every 10 seconds
+        }
       }
+
+      return () => {
+        if (intervalId) clearInterval(intervalId);
+      };
     }, [dispatch, dateParam])
   );
 
@@ -114,8 +132,8 @@ export const RouteDetailScreen = ({ navigation }: any) => {
             const punchIn = session.attendance?.check_in ? formatTimeStr(session.attendance.check_in) : '--:--';
             const punchOut = session.attendance?.check_out ? formatTimeStr(session.attendance.check_out) : 'Ongoing';
             return (
-              <TouchableOpacity 
-                key={session.attendance_id} 
+              <TouchableOpacity
+                key={session.attendance_id}
                 style={styles.sessionCard}
                 activeOpacity={0.8}
                 onPress={() => setSelectedSessionId(session.attendance_id)}
@@ -123,6 +141,12 @@ export const RouteDetailScreen = ({ navigation }: any) => {
                 <View style={styles.sessionHeader}>
                   <Icon name="map-marker-path" size={20} color={colors.primary} />
                   <Text style={styles.sessionTitle}>Route Session {index + 1}</Text>
+                  {!session.attendance?.check_out && (
+                    <View style={styles.liveBadge}>
+                      <View style={styles.liveIndicator} />
+                      <Text style={styles.liveBadgeText}>LIVE</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.sessionRow}>
@@ -154,7 +178,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   }
 
   // 3. Map Detail View
-  const activeSession = selectedSessionId 
+  const activeSession = selectedSessionId
     ? sessions.find((s: any) => s.attendance_id === selectedSessionId)
     : (sessions.length === 1 ? sessions[0] : null);
 
@@ -178,9 +202,23 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const attendance = activeSession ? activeSession.attendance : record?.attendances?.[0];
 
   const punchInTime = (isCorrectDate || record) && attendance?.check_in ? formatTimeStr(attendance.check_in) : '--:--';
-  const punchOutTime = (isCorrectDate || record) && attendance?.check_out ? formatTimeStr(attendance.check_out) : '--:--';
+  const isOngoing = (isCorrectDate || record) && !attendance?.check_out;
+  const punchOutTime = isOngoing ? 'Ongoing' : formatTimeStr(attendance?.check_out);
   const displayKm = isCorrectDate ? (activeSession?.total_km ?? routeData?.total_km) : undefined;
   const displayPoints = isCorrectDate ? (activeSession?.total_points ?? routeData?.total_points) : undefined;
+
+  const punchInSelfie = activeSession?.punch_in_selfie;
+  const punchOutSelfie = activeSession?.punch_out_selfie;
+
+  const renderSelfie = (base64Str?: string) => {
+    if (!base64Str) return <View style={styles.selfiePlaceholder} />;
+    const uri = base64Str.startsWith('data:image') ? base64Str : `data:image/jpeg;base64,${base64Str}`;
+    return (
+      <TouchableOpacity activeOpacity={0.8} onPress={() => setViewerImage(uri)}>
+        <Image source={{ uri }} style={styles.selfiePlaceholder} />
+      </TouchableOpacity>
+    );
+  };
 
   const handleBack = () => {
     if (sessions.length > 1 && selectedSessionId !== null) {
@@ -206,24 +244,15 @@ export const RouteDetailScreen = ({ navigation }: any) => {
             <OsmMapView
               ref={mapRef}
               style={{ width: '100%', height: '100%', borderRadius: 12 }}
-              initialRegion={startLocation ? {
-                latitude: startLocation.latitude,
-                longitude: startLocation.longitude,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              } : undefined}
-              onLayout={() => {
-                if (routePoints.length > 1 && mapRef.current) {
-                  mapRef.current.fitToCoordinates(routePoints, {
-                    edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
-                    animated: false,
-                  });
-                }
-              }}
-              polylines={[{ coordinates: routePoints, strokeColor: colors.primary, strokeWidth: 4 }]}
+              fitToCoordinates={routePoints.length > 1 ? routePoints : undefined}
+              polylines={[{ coordinates: routePoints, strokeColor: "#4285F4", strokeWidth: 4 }]}
               markers={[
                 ...(startLocation ? [{ coordinate: startLocation, pinColor: 'green', title: 'Start Location' }] : []),
-                ...(endLocation ? [{ coordinate: endLocation, pinColor: 'red', title: 'End Location' }] : [])
+                ...(endLocation ? [{
+                  coordinate: endLocation,
+                  pinColor: isOngoing ? 'blue' : 'red',
+                  title: isOngoing ? 'Current Location' : 'End Location'
+                }] : [])
               ]}
             />
           ) : routeLoading ? (
@@ -243,16 +272,47 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
         <View style={styles.detailCard}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Punch in</Text>
-            <Text style={styles.detailValue}>{punchInTime}</Text>
+            <View>
+              <Text style={styles.detailLabel}>Punch in</Text>
+              <Text style={styles.detailValue}>{punchInTime}</Text>
+            </View>
+            {renderSelfie(punchInSelfie)}
           </View>
           <View style={styles.divider} />
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Punch out</Text>
-            <Text style={styles.detailValue}>{punchOutTime}</Text>
+            <View>
+              <Text style={styles.detailLabel}>Punch out</Text>
+              <Text style={styles.detailValue}>{punchOutTime}</Text>
+            </View>
+            {renderSelfie(punchOutSelfie)}
           </View>
         </View>
       </ScrollView>
+
+      {/* Full Screen Image Viewer Modal */}
+      <Modal
+        visible={viewerImage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewerImage(null)}
+      >
+        <View style={styles.viewerOverlay}>
+          <TouchableOpacity
+            style={styles.viewerCloseBtn}
+            onPress={() => setViewerImage(null)}
+            activeOpacity={0.7}
+          >
+            <Icon name="close" size={28} color="#FFF" />
+          </TouchableOpacity>
+          {viewerImage && (
+            <Image
+              source={{ uri: viewerImage }}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -382,5 +442,46 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.textPrimary,
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewerImage: {
+    width: '100%',
+    height: '80%',
+  },
+  viewerCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 'auto',
+  },
+  liveIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.danger,
+    marginRight: 4,
+  },
+  liveBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.danger,
+    letterSpacing: 0.5,
   },
 });

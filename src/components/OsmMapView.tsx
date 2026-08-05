@@ -13,6 +13,7 @@ export interface OsmMapViewProps {
   initialRegion?: Region;
   markers?: MarkerProps[];
   polylines?: PolylineProps[];
+  fitToCoordinates?: Coordinate[];
   scrollEnabled?: boolean;
   zoomEnabled?: boolean;
   onLayout?: () => void;
@@ -139,7 +140,8 @@ export const OsmMapView = forwardRef((props: OsmMapViewProps, ref) => {
       const data = {
         region: props.region,
         markers: props.markers,
-        polylines: props.polylines
+        polylines: props.polylines,
+        fitToCoordinates: props.fitToCoordinates
       };
       webviewRef.current.injectJavaScript(`
         if (window.updateMapData) {
@@ -171,7 +173,8 @@ export const OsmMapView = forwardRef((props: OsmMapViewProps, ref) => {
                  const initData = {
                    region: props.region || props.initialRegion,
                    markers: props.markers,
-                   polylines: props.polylines
+                   polylines: props.polylines,
+                   fitToCoordinates: props.fitToCoordinates
                  };
                  webviewRef.current.injectJavaScript(`
                    if (window.updateMapData) {
