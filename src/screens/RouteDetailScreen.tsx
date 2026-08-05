@@ -12,7 +12,7 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchRouteData } from '../redux/slice/trackingSlice';
 import { RootState, AppDispatch } from '../redux/store';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { OsmMapView } from '../components/OsmMapView';
 
 export const RouteDetailScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -26,7 +26,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const { historyData } = useSelector((state: RootState) => state.attendance);
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
 
   const isCorrectDate = !dateParam || routeData?.date === dateParam;
@@ -58,11 +58,7 @@ export const RouteDetailScreen = ({ navigation }: any) => {
     }, [dispatch, dateParam])
   );
 
-  useEffect(() => {
-    if (routeData?.attendance_sessions?.length === 1) {
-      setSelectedSessionId(routeData.attendance_sessions[0].attendance_id);
-    }
-  }, [routeData]);
+  // Removed auto-select for single session to always show the list first
 
   const formatTimeStr = (dateTimeStr: string) => {
     if (!dateTimeStr) return '--:--';
@@ -94,10 +90,17 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
   // const sessions = routeData?.attendance_sessions || [];
 
-  // 1. Loading State removed to make loading smoother
+  // 1. Loading State
+  if (routeLoading && !isCorrectDate) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
 
-  // 2. List View (Multiple Sessions, None Selected)
-  if (sessions.length > 1 && selectedSessionId === null) {
+  // 2. List View (Show if there are any sessions and none is selected)
+  if (sessions.length > 0 && selectedSessionId === null) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -199,19 +202,16 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.mapBox}>
-          {routeLoading && !isCorrectDate ? (
-            <ActivityIndicator size="large" color={colors.primary} />
-          ) : routePoints.length > 0 ? (
-            <MapView
+          {routePoints.length > 0 ? (
+            <OsmMapView
               ref={mapRef}
-              provider={PROVIDER_GOOGLE}
               style={{ width: '100%', height: '100%', borderRadius: 12 }}
-              initialRegion={{
+              initialRegion={startLocation ? {
                 latitude: startLocation.latitude,
                 longitude: startLocation.longitude,
                 latitudeDelta: 0.05,
                 longitudeDelta: 0.05,
-              }}
+              } : undefined}
               onLayout={() => {
                 if (routePoints.length > 1 && mapRef.current) {
                   mapRef.current.fitToCoordinates(routePoints, {
@@ -220,19 +220,12 @@ export const RouteDetailScreen = ({ navigation }: any) => {
                   });
                 }
               }}
-            >
-              <Polyline
-                coordinates={routePoints}
-                strokeColor={colors.primary}
-                strokeWidth={4}
-              />
-              {startLocation && (
-                <Marker coordinate={startLocation} pinColor="green" title="Start Location" />
-              )}
-              {endLocation && (
-                <Marker coordinate={endLocation} pinColor="red" title="End Location" />
-              )}
-            </MapView>
+              polylines={[{ coordinates: routePoints, strokeColor: colors.primary, strokeWidth: 4 }]}
+              markers={[
+                ...(startLocation ? [{ coordinate: startLocation, pinColor: 'green', title: 'Start Location' }] : []),
+                ...(endLocation ? [{ coordinate: endLocation, pinColor: 'red', title: 'End Location' }] : [])
+              ]}
+            />
           ) : routeLoading ? (
             <ActivityIndicator size="large" color={colors.primary} />
           ) : (

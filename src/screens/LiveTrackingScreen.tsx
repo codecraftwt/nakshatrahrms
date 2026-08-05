@@ -19,7 +19,7 @@ import { postPunchOut, fetchGeoFencing } from '../redux/slice/attendanceSlice';
 import { fetchLiveKm, fetchKmSummary, fetchRouteData } from '../redux/slice/trackingSlice';
 import { getDistanceInMeters } from '../utils/distance';
 import Geolocation from 'react-native-geolocation-service';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { OsmMapView } from '../components/OsmMapView';
 import { usePipMode } from '../hooks/usePipMode';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 
@@ -35,7 +35,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const { statusData, todayData, geoFencingData } = useSelector((state: RootState) => state.attendance);
   const [isMapExpanded, setIsMapExpanded] = React.useState(false);
   const [routeCoordinates, setRouteCoordinates] = React.useState<{latitude: number, longitude: number}[]>([]);
-  const mapRef = React.useRef<MapView>(null);
+  const mapRef = React.useRef<any>(null);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -350,9 +350,8 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const renderMap = (expanded: boolean) => (
     <View style={expanded ? styles.expandedMapContainer : styles.mapBox}>
       {currentLocation ? (
-        <MapView
+        <OsmMapView
           ref={expanded ? mapRef : undefined}
-          provider={PROVIDER_GOOGLE}
           style={{ width: '100%', height: '100%', borderRadius: expanded ? 0 : 12 }}
           region={{
             latitude: currentLocation.lat,
@@ -360,16 +359,9 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
             latitudeDelta: expanded ? 0.005 : 0.01,
             longitudeDelta: expanded ? 0.005 : 0.01,
           }}
-        >
-          {routeCoordinates.length > 0 && (
-            <Polyline
-              coordinates={routeCoordinates}
-              strokeColor={colors.primary}
-              strokeWidth={4}
-            />
-          )}
-          <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
-        </MapView>
+          polylines={routeCoordinates.length > 0 ? [{ coordinates: routeCoordinates, strokeColor: colors.primary, strokeWidth: 4 }] : []}
+          markers={[{ coordinate: { latitude: currentLocation.lat, longitude: currentLocation.lng }, pinColor: 'blue' }]}
+        />
       ) : (
         <ActivityIndicator size="large" color={colors.primary} />
       )}
@@ -394,8 +386,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
     return (
       <View style={{ flex: 1 }}>
         {currentLocation ? (
-          <MapView
-            provider={PROVIDER_GOOGLE}
+          <OsmMapView
             style={{ width: '100%', height: '100%' }}
             region={{
               latitude: currentLocation.lat,
@@ -403,20 +394,11 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
               latitudeDelta: 0.005,
               longitudeDelta: 0.005,
             }}
-            pitchEnabled={false}
-            rotateEnabled={false}
             scrollEnabled={false}
             zoomEnabled={false}
-          >
-            {routeCoordinates.length > 0 && (
-              <Polyline
-                coordinates={routeCoordinates}
-                strokeColor={colors.primary}
-                strokeWidth={4}
-              />
-            )}
-            <Marker coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }} />
-          </MapView>
+            polylines={routeCoordinates.length > 0 ? [{ coordinates: routeCoordinates, strokeColor: colors.primary, strokeWidth: 4 }] : []}
+            markers={[{ coordinate: { latitude: currentLocation.lat, longitude: currentLocation.lng }, pinColor: 'blue' }]}
+          />
         ) : (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bgPage }}>
             <ActivityIndicator size="large" color={colors.primary} />

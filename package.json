@@ -30,12 +30,12 @@
     "react-native-get-random-values": "^2.0.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
-    "react-native-maps": "^1.27.2",
     "react-native-pdf": "^7.0.4",
     "react-native-permissions": "^5.5.3",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.25.2",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-webview": "^14.0.1",
     "react-redux": "^9.3.0",
     "redux-persist": "^6.0.0",
     "uuid": "^14.0.0"
