@@ -34,7 +34,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const { data: dashboardData } = useSelector((state: RootState) => state.dashboard);
   const { statusData, todayData, geoFencingData } = useSelector((state: RootState) => state.attendance);
   const [isMapExpanded, setIsMapExpanded] = React.useState(false);
-  const [routeCoordinates, setRouteCoordinates] = React.useState<{latitude: number, longitude: number}[]>([]);
+  const [routeCoordinates, setRouteCoordinates] = React.useState<{ latitude: number, longitude: number }[]>([]);
   const mapRef = React.useRef<any>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -72,7 +72,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
       setRouteCoordinates(formattedPoints);
     }
   }, [routeData]);
-  const [currentLocation, setCurrentLocation] = React.useState<{lat: number, lng: number} | null>(null);
+  const [currentLocation, setCurrentLocation] = React.useState<{ lat: number, lng: number } | null>(null);
   const [outRemarks, setOutRemarks] = React.useState('');
   const [selfieUri, setSelfieUri] = React.useState<string | null>(null);
   const [selfieBase64, setSelfieBase64] = React.useState<string | null>(null);
@@ -92,7 +92,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
       const result = await launchCamera(options);
       setPipAllowed(true);
-      
+
       if (result.didCancel) return;
       if (result.errorCode || !result.assets || result.assets.length === 0) {
         showAlert('Error', 'Failed to capture selfie.');
@@ -174,7 +174,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
             return;
           }
         }
-        
+
         Geolocation.getCurrentPosition(
           (position) => {
             setCurrentLocation({
@@ -193,7 +193,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         setCurrentLocation({ lat: 16.7908, lng: 74.2816 });
       }
     };
-    
+
     fetchLocation();
   }, []);
 
@@ -217,7 +217,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
           const result = await launchCamera(options);
           setPipAllowed(true);
-          
+
           if (result.didCancel) {
             setLoading(false);
             return;
@@ -252,7 +252,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
         const result = await launchCamera(options);
         setPipAllowed(true);
-        
+
         if (result.didCancel) {
           setLoading(false);
           return;
@@ -273,13 +273,13 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
 
       try {
         const position = await LocationService.getAccurateLocation();
-        
+
         // ── Geo Fencing Validation for Punch Out ──────────────────────────────────
         if (geoFencingData?.geo_fencing && geoFencingData.locations && geoFencingData.locations.length > 0) {
           let isWithinRange = false;
           let minDist = Infinity;
           let nearestLocName = 'an office';
-          
+
           for (const loc of geoFencingData.locations) {
             const d = getDistanceInMeters(position.coords.latitude, position.coords.longitude, loc.latitude, loc.longitude);
             if (d < minDist) {
@@ -291,25 +291,25 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
               break;
             }
           }
-          
+
           if (!isWithinRange) {
             showAlert('Outside Geo-Fence', `You are not able to punch out. If you want to punch out, go near ${nearestLocName}.`);
             setLoading(false);
             return;
           }
         }
-        
+
         const sessions = routeData?.attendance_sessions || [];
         const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
-        
+
         // Comprehensive fallback for attendance_id since routeData may not have it instantly
-        const attendanceId = ongoingSession?.attendance_id || 
-                             ongoingSession?.attendance?.id || 
-                             dashboardData?.attendance_id || 
-                             dashboardData?.id || 
-                             statusData?.attendance_id ||
-                             statusData?.id ||
-                             todayData?.id;
+        const attendanceId = ongoingSession?.attendance_id ||
+          ongoingSession?.attendance?.id ||
+          dashboardData?.attendance_id ||
+          dashboardData?.id ||
+          statusData?.attendance_id ||
+          statusData?.id ||
+          todayData?.id;
 
         if (!attendanceId) {
           showAlert('Error', 'Could not determine active attendance session for punch out. Please wait a moment and try again.');
@@ -325,10 +325,10 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           timestamp: new Date().toISOString(),
           out_remarks: outRemarks,
         };
-        
+
         await dispatch(postPunchOut(payload)).unwrap();
         await LocationService.stopTracking();
-        
+
         showAlert('Success', 'Punched out successfully!', 'success', () => navigation.navigate('MainTabs'));
       } catch (err: any) {
         if (err.message && err.message.includes('Location timeout')) {
@@ -365,9 +365,9 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
       ) : (
         <ActivityIndicator size="large" color={colors.primary} />
       )}
-      
-      <TouchableOpacity 
-        style={styles.expandButton} 
+
+      <TouchableOpacity
+        style={styles.expandButton}
         onPress={() => setIsMapExpanded(!expanded)}
       >
         <Icon name={expanded ? "fullscreen-exit" : "fullscreen"} size={28} color={colors.primary} />
@@ -474,10 +474,10 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         )}
 
         <View style={styles.metricRow}>
-          <MetricTile 
-            label="Distance today" 
-            value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
-            unit="km" 
+          <MetricTile
+            label="Distance today"
+            value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")}
+            unit="km"
           />
           <MetricTile label="Time elapsed" value="Tracking..." subtext="since punch in" />
         </View>
@@ -514,7 +514,7 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
         {loading ? (
           <ActivityIndicator size="large" color={colors.danger} style={styles.punchOutBtn} />
         ) : (
-          <PrimaryButton 
+          <PrimaryButton
             label="⏹ Punch out"
             onPress={handlePunchOut}
             color={colors.danger}

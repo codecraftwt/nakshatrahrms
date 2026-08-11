@@ -55,16 +55,16 @@ export const ExpenseListScreen = ({ navigation }: any) => {
         <View style={[styles.modalContent, { width: '85%', borderRadius: 16, padding: 24, maxHeight: undefined }]}>
           <Text style={{ fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 12, textAlign: 'center' }}>Submit Expense</Text>
           <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 24, textAlign: 'center', lineHeight: 22 }}>Do you want to submit this expense request?</Text>
-          
+
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12 }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, justifyContent: 'center' }}
               onPress={() => setSubmitModalVisible(false)}
             >
               <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600', textTransform: 'uppercase' }}>Cancel</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={{ backgroundColor: colors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, justifyContent: 'center' }}
               onPress={handleConfirmSubmit}
             >
@@ -98,17 +98,17 @@ export const ExpenseListScreen = ({ navigation }: any) => {
     };
 
     return (
-      <TouchableOpacity 
-        key={item.id} 
+      <TouchableOpacity
+        key={item.id}
         style={styles.listCard}
         activeOpacity={0.8}
         onPress={() => handleExpensePress(item)}
       >
         <View style={styles.iconContainer}>
-          <Icon 
-            name={getCategoryIcon(categoryName)} 
-            size={24} 
-            color={colors.primary} 
+          <Icon
+            name={getCategoryIcon(categoryName)}
+            size={24}
+            color={colors.primary}
           />
         </View>
         <View style={styles.listTextContainer}>
@@ -130,7 +130,7 @@ export const ExpenseListScreen = ({ navigation }: any) => {
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Expenses</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
           onPress={() => navigation.navigate('AddExpenseScreen')}
         >
@@ -154,7 +154,7 @@ export const ExpenseListScreen = ({ navigation }: any) => {
             <Text style={{ textAlign: 'center', color: colors.textSecondary, marginTop: 20 }}>No expenses found.</Text>
           )}
         </View>
-        
+
         <View style={{ height: 20 + insets.bottom }} />
       </ScrollView>
 
@@ -171,16 +171,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: '#FFFFFF',
   },
   backBtn: {
-    marginRight: 16,
+    padding: 8,
+    marginLeft: -8,
   },
   headerTitle: {
-    flex: 1,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },

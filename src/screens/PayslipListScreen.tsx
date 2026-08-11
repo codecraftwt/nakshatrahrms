@@ -61,8 +61,8 @@ export const PayslipListScreen = ({ navigation }: any) => {
     const date = item.date_to || item.date_from || '';
 
     return (
-      <TouchableOpacity 
-        key={item.id || index} 
+      <TouchableOpacity
+        key={item.id || index}
         style={styles.cardContainer}
         activeOpacity={0.7}
         onPress={() => handlePayslipPress(item)}
@@ -77,9 +77,9 @@ export const PayslipListScreen = ({ navigation }: any) => {
             {date ? <Text style={styles.cardDate}>{date}</Text> : null}
           </View>
         </View>
-        
+
         <View style={styles.cardDivider} />
-        
+
         <View style={styles.cardBottomRow}>
           <Text style={styles.viewPdfText}>View Payslip PDF</Text>
           <View style={styles.arrowIconWrapper}>
@@ -97,10 +97,11 @@ export const PayslipListScreen = ({ navigation }: any) => {
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payslips</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Modern Month/Year Selector */}
         <View style={styles.monthSelectorContainer}>
           <TouchableOpacity onPress={handlePrevMonth} style={styles.monthArrowBtn}>
@@ -132,7 +133,7 @@ export const PayslipListScreen = ({ navigation }: any) => {
             </View>
           )}
         </View>
-        
+
         <View style={{ height: 40 + insets.bottom }} />
       </ScrollView>
     </SafeAreaView>
@@ -147,19 +148,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+    borderBottomColor: colors.border,
   },
   backBtn: {
-    marginRight: 16,
+    padding: 8,
+    marginLeft: -8,
   },
   headerTitle: {
-    flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },

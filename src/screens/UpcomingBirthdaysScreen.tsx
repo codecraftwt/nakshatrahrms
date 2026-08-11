@@ -74,9 +74,9 @@ export const UpcomingBirthdaysScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
       <View style={styles.divider} />
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterScroll}
         ref={scrollViewRef}
         onContentSizeChange={() => {
@@ -115,7 +115,7 @@ export const UpcomingBirthdaysScreen = ({ navigation }: any) => {
     const name = item.name || item.employee_name || 'Employee';
     const dept = item.department?.name || (item.department_id ? (Array.isArray(item.department_id) ? item.department_id[1] : item.department_id.name) : 'Department');
     const dob = item.birthday || item.date_of_birth || '';
-    
+
     // Format date if needed (e.g., from YYYY-MM-DD to DD MMM)
     let displayDate = dob;
     if (dob) {
@@ -124,7 +124,7 @@ export const UpcomingBirthdaysScreen = ({ navigation }: any) => {
         if (!isNaN(d.getTime())) {
           displayDate = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const imageSource = item.image_128 || item.image ? { uri: `data:image/jpeg;base64,${item.image_128 || item.image}` } : null;
@@ -140,7 +140,7 @@ export const UpcomingBirthdaysScreen = ({ navigation }: any) => {
             </View>
           )}
         </View>
-        
+
         <View style={styles.infoContainer}>
           <Text style={styles.nameText}>{name}</Text>
           <Text style={styles.deptText}>{dept}</Text>

@@ -16,8 +16,10 @@ import { AppDispatch, RootState } from '../redux/store';
 import { postPunchIn, fetchGeoFencing } from '../redux/slice/attendanceSlice';
 import { getDistanceInMeters } from '../utils/distance';
 import Geolocation from 'react-native-geolocation-service';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Modal } from 'react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceSettingsModal } from '../components/DeviceSettingsModal';
 
 export const PunchInScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -27,6 +29,8 @@ export const PunchInScreen = ({ navigation }: any) => {
   const { geoFencingData } = useSelector((state: RootState) => state.attendance);
   const isLiveTrackingDisabled = user?.track_live_location === false;
   
+  const isTargetDevice = Platform.OS === 'android' && ['vivo', 'oppo', 'oneplus'].includes(String(Platform.constants.Brand || Platform.constants.Manufacturer || '').toLowerCase());
+
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieBase64, setSelfieBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +52,16 @@ export const PunchInScreen = ({ navigation }: any) => {
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   const [distanceToNearest, setDistanceToNearest] = useState<number | null>(null);
   const [nearestLocationInfo, setNearestLocationInfo] = useState<{name: string, latitude: number, longitude: number} | null>(null);
+
+  const [deviceModalVisible, setDeviceModalVisible] = useState(false);
+  const [deviceBrand, setDeviceBrand] = useState('');
+  const [isInterceptingPunchIn, setIsInterceptingPunchIn] = useState(false);
+
+  useEffect(() => {
+    if (isTargetDevice && Platform.OS === 'android') {
+      setDeviceBrand(String(Platform.constants.Brand || Platform.constants.Manufacturer || '').toLowerCase());
+    }
+  }, [isTargetDevice]);
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'error', onPrimaryPress?: () => void) => {
     setAlertConfig({ visible: true, title, message, type, onPrimaryPress });
@@ -162,8 +176,33 @@ export const PunchInScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleConfirmPunchIn = async () => {
+  const handleConfirmPunchIn = async (skipDeviceCheck = false) => {
     if (loading) return;
+
+    if (!skipDeviceCheck) {
+      try {
+        let brand = '';
+        if (Platform.OS === 'android') {
+          brand = String(Platform.constants.Brand || Platform.constants.Manufacturer || '');
+        }
+        const lowerBrand = brand.toLowerCase();
+        
+        if (['vivo', 'oppo', 'oneplus'].includes(lowerBrand)) {
+          const today = new Date().toISOString().split('T')[0];
+          const lastShown = await AsyncStorage.getItem('@last_device_settings_shown_punchin');
+          
+          if (lastShown !== today) {
+            setDeviceBrand(lowerBrand);
+            setIsInterceptingPunchIn(true);
+            setDeviceModalVisible(true);
+            await AsyncStorage.setItem('@last_device_settings_shown_punchin', today);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Device check failed', err);
+      }
+    }
 
     setLoading(true);
 
@@ -274,6 +313,13 @@ export const PunchInScreen = ({ navigation }: any) => {
           <Icon name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Punch in</Text>
+
+        {isTargetDevice && (
+          <TouchableOpacity style={styles.manualBtn} onPress={() => setDeviceModalVisible(true)}>
+            <Icon name="book-open-page-variant" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+        
         {geoFencingData?.geo_fencing && distanceToNearest !== null && (
           <View style={[styles.inRangeBadge, distanceToNearest > 50 ? { backgroundColor: colors.dangerBg } : undefined]}>
             <Text style={[styles.inRangeText, distanceToNearest > 50 ? { color: colors.danger } : undefined]}>
@@ -386,6 +432,18 @@ export const PunchInScreen = ({ navigation }: any) => {
         type={alertConfig.type}
         onPrimaryPress={closeAlert}
       />
+
+      <DeviceSettingsModal
+        visible={deviceModalVisible}
+        brand={deviceBrand}
+        onClose={() => {
+          setDeviceModalVisible(false);
+          if (isInterceptingPunchIn) {
+            setIsInterceptingPunchIn(false);
+            handleConfirmPunchIn(true); // Continue with punch in
+          }
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -409,6 +467,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     ...Typography.h2,
     color: colors.textPrimary,
     flex: 1,
+  },
+  manualBtn: {
+    padding: 8,
+    marginRight: 8,
+    backgroundColor: 'rgba(21, 88, 176, 0.1)',
+    borderRadius: 8,
   },
   inRangeBadge: {
     backgroundColor: colors.successBg,

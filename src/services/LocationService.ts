@@ -207,39 +207,39 @@ const handleLocationUpdate = async (position: PositionResult): Promise<void> => 
     const dist = haversineDistance(lastRecordedPoint, position.coords);
     const timeSinceLastMs = position.timestamp - lastRecordedPoint.time;
 
-    // 2. Stationary filter — FIX: previously this dropped points forever while
-    // the user stood still, leaving zero attendance pings for the whole period.
-    // Now: only skip if BOTH (a) movement is below threshold AND
-    // (b) we recorded a point recently. Otherwise force a "still here" ping.
-    if (dist < MIN_DISTANCE_METERS && timeSinceLastMs < STATIONARY_PING_INTERVAL_MS) {
-      return; // genuinely stationary and recent — skip
-    }
-
-    // 3. Speed sanity check — reject GPS teleport spikes
-    // FIX: previously, rejecting a spike left lastRecordedPoint unchanged,
-    // which could cascade into rejecting all future real points if the bad
-    // fix itself was the new "anchor". We now force-accept after a few
-    // consecutive rejects so tracking can never get permanently stuck.
+    // Calculate speed
     if (timeSinceLastMs > 0) {
       const speedKmH = (dist / (timeSinceLastMs / 1000)) * 3.6;
+      
+      const isPingNeeded = timeSinceLastMs >= STATIONARY_PING_INTERVAL_MS;
 
+      if (!isPingNeeded) {
+        // 2. GPS Fluctuation Filter
+        // If distance is <= 5 meters and speed is < 3 km/h -> Drop point (Idle)
+        // If distance is <= 5 meters and speed is >= 3 km/h -> Drop point (Micro GPS Spike)
+        if (dist <= 5) {
+          return;
+        }
+        // If distance > 5 meters, we keep the point (Real movement, including slow walking)
+      }
+
+      // 3. Speed sanity check — reject massive GPS teleport spikes (> 200 km/h)
       if (speedKmH > MAX_SPEED_KMH) {
         consecutiveSpeedRejects++;
-
         if (consecutiveSpeedRejects < MAX_CONSECUTIVE_SPEED_REJECTS) {
           console.log(
-            '[LocationService] Skipping GPS spike, implied speed:',
+            '[LocationService] Skipping massive GPS spike, implied speed:',
             speedKmH.toFixed(1),
             'km/h',
           );
           return;
         }
-
         console.warn(
           '[LocationService] Accepting point despite speed flag — too many consecutive rejects',
         );
-        // fall through and accept this point, resetting the counter below
       }
+    } else {
+      return; // Drop immediate duplicates
     }
   }
 
@@ -977,16 +977,27 @@ export const LocationService = {
       console.log('[LocationService] Android: network watchPosition cleaned up');
     }
 
-    if (!BackgroundService.isRunning()) return;
-
     try {
       // Small delay to ensure Geolocation.clearWatch completes natively 
       // before we forcefully destroy the Android Service context.
       await new Promise<void>((resolve) => setTimeout(resolve, 100));
-      await BackgroundService.stop();
-      if (BgLocationModule?.stopService) {
-        await BgLocationModule.stopService();
+      
+      try {
+        if (BackgroundService.isRunning()) {
+          await BackgroundService.stop();
+        }
+      } catch (e) {
+        console.warn('Failed to stop BackgroundService', e);
       }
+
+      try {
+        if (BgLocationModule?.stopService) {
+          await BgLocationModule.stopService();
+        }
+      } catch (e) {
+        console.warn('Failed to stop BgLocationModule', e);
+      }
+      
       console.log('[LocationService] Android: foreground service stopped');
     } catch (e) {
       console.warn('[LocationService] Android: failed to stop foreground service:', e);

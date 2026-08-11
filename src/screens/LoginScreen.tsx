@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { AppText as Text } from '../components/AppText';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -41,16 +42,14 @@ export const LoginScreen = ({ navigation }: any) => {
         <Icon name="arrow-left" size={28} color={colors.textPrimary} />
       </TouchableOpacity>
 
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
 
           <View style={styles.headerArea}>
             <View style={styles.logoCircle}>
@@ -109,8 +108,7 @@ export const LoginScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };

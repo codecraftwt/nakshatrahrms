@@ -16,7 +16,7 @@ export const MyRegularisationListScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
-  
+
   const { myData, myLoading } = useSelector((state: RootState) => state.regularisation);
 
   useFocusEffect(
@@ -37,11 +37,11 @@ export const MyRegularisationListScreen = ({ navigation }: any) => {
     const typeName = item.permission_type ? (item.permission_type.charAt(0).toUpperCase() + item.permission_type.slice(1)) : 'Regularization';
     const date = item.start_date || item.create_date?.split(' ')[0] || '';
     const statusLabel = getStatusLabel(item.state);
-    
+
     // Determine badge color based on state
     let badgeBg = colors.warningBg;
     let badgeText = colors.warningText;
-    
+
     if (item.state === 'approved') {
       badgeBg = 'rgba(76, 175, 80, 0.1)';
       badgeText = '#4CAF50';
@@ -51,8 +51,8 @@ export const MyRegularisationListScreen = ({ navigation }: any) => {
     }
 
     return (
-      <View 
-        key={item.id} 
+      <View
+        key={item.id}
         style={styles.listCard}
       >
         <View style={styles.cardTop}>
@@ -103,9 +103,9 @@ export const MyRegularisationListScreen = ({ navigation }: any) => {
         </View>
         <View style={{ height: 100 + insets.bottom }} />
       </ScrollView>
-      
+
       {/* Floating Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 16 }]}
         onPress={() => navigation.navigate('RegularisationScreen')}
         activeOpacity={0.8}

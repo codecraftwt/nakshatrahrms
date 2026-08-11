@@ -27,7 +27,7 @@ export const ServerUrlScreen = ({ navigation }: any) => {
     if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
       finalUrl = 'https://' + finalUrl;
     }
-    
+
     // Ensure URL ends with a slash for consistent appending later, or doesn't depending on how backend handles it
     // Usually it's better to remove trailing slash if we append like `/web/database/list`
     if (finalUrl.endsWith('/')) {
@@ -47,7 +47,7 @@ export const ServerUrlScreen = ({ navigation }: any) => {
       };
 
       const testEndpoint = `${finalUrl}/web/database/list`;
-      
+
       const response = await axios.post(testEndpoint, payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -61,7 +61,7 @@ export const ServerUrlScreen = ({ navigation }: any) => {
         // Even if we don't need the DB for this frontend, it confirms the Odoo server is valid
         // We append trailing slash as axiosInstance base URL usually needs one or works fine with it
         await setBaseUrl(finalUrl + '/');
-        
+
         // Go to login screen
         navigation.replace('LoginScreen');
       } else {

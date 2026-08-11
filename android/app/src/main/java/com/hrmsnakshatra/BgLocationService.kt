@@ -13,6 +13,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -29,6 +32,15 @@ class BgLocationService : Service() {
   private var lastPointAtMs: Long = 0L
   private var updatesRunning = false
   private var wakeLock: android.os.PowerManager.WakeLock? = null
+
+  private val dismissReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      if (intent?.action == ACTION_DISMISS && updatesRunning) {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.notify(NOTIFICATION_ID, buildNotification())
+      }
+    }
+  }
 
   private val locationCallback =
     object : LocationCallback() {
@@ -58,6 +70,12 @@ class BgLocationService : Service() {
     super.onCreate()
     fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
     ensureNotificationChannel()
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      registerReceiver(dismissReceiver, IntentFilter(ACTION_DISMISS), Context.RECEIVER_NOT_EXPORTED)
+    } else {
+      registerReceiver(dismissReceiver, IntentFilter(ACTION_DISMISS))
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -131,11 +149,24 @@ class BgLocationService : Service() {
     }
     releaseWakeLock()
     Log.d(TAG, "Foreground location updates stopped")
+    
+    val manager = getSystemService(NotificationManager::class.java)
+    val completedNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setContentTitle("Tracking completed")
+      .setContentText("Location tracking has finished")
+      .setOngoing(false)
+      .setAutoCancel(true)
+      .setCategory(NotificationCompat.CATEGORY_SERVICE)
+      .build()
+      
+    manager?.notify(NOTIFICATION_ID, completedNotification)
+    
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-      stopForeground(STOP_FOREGROUND_REMOVE)
+      stopForeground(STOP_FOREGROUND_DETACH)
     } else {
       @Suppress("DEPRECATION")
-      stopForeground(true)
+      stopForeground(false)
     }
   }
 
@@ -253,6 +284,13 @@ class BgLocationService : Service() {
         openAppIntent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
+      
+    val deleteIntent = PendingIntent.getBroadcast(
+      this,
+      2,
+      Intent(ACTION_DISMISS).setPackage(packageName),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(R.mipmap.ic_launcher)
@@ -263,10 +301,18 @@ class BgLocationService : Service() {
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setContentIntent(pendingIntent)
-      .build()
+      .setDeleteIntent(deleteIntent)
+      .build().apply {
+          flags = flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
+      }
   }
 
   override fun onDestroy() {
+    try {
+      unregisterReceiver(dismissReceiver)
+    } catch (e: Exception) {
+      Log.w(TAG, "Receiver not registered", e)
+    }
     stopTracking()
     super.onDestroy()
   }
@@ -277,6 +323,7 @@ class BgLocationService : Service() {
     private const val TAG = "BGTRACK_NATIVE"
     const val ACTION_START = "com.hrmsnakshatra.action.START"
     const val ACTION_STOP = "com.hrmsnakshatra.action.STOP"
+    const val ACTION_DISMISS = "com.hrmsnakshatra.action.DISMISS"
     private const val CHANNEL_ID = "bgtrack-native-service"
     private const val NOTIFICATION_ID = 1101
     private const val UPDATE_INTERVAL_MS = 5000L

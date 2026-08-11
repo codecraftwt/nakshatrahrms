@@ -14,6 +14,16 @@ import { fetchRouteData } from '../redux/slice/trackingSlice';
 import { RootState, AppDispatch } from '../redux/store';
 import { OsmMapView } from '../components/OsmMapView';
 
+const formatBackendTime = (timeStr?: string) => {
+  if (!timeStr) return undefined;
+  const parts = timeStr.split(':');
+  if (parts.length !== 3) return timeStr;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+};
+
 export const RouteDetailScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
@@ -32,6 +42,11 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
   const isCorrectDate = !dateParam || routeData?.date === dateParam;
   const sessions = isCorrectDate ? (routeData?.attendance_sessions || []) : [];
+  
+  const isOngoingRef = useRef(false);
+  useEffect(() => {
+    isOngoingRef.current = sessions.some((session: any) => !session.attendance?.check_out);
+  }, [sessions]);
 
   // Handle hardware back button
   useFocusEffect(
@@ -65,8 +80,10 @@ export const RouteDetailScreen = ({ navigation }: any) => {
 
         if (dateParam === todayStr) {
           intervalId = setInterval(() => {
-            dispatch(fetchRouteData(dateParam));
-          }, 10000); // Poll every 10 seconds
+            if (isOngoingRef.current) {
+              dispatch(fetchRouteData(dateParam));
+            }
+          }, 10000); // Poll every 10 seconds only if ongoing
         }
       }
 
@@ -162,11 +179,11 @@ export const RouteDetailScreen = ({ navigation }: any) => {
                 <View style={styles.sessionRow}>
                   <View style={styles.sessionCol}>
                     <Text style={styles.sessionLabel}>Distance</Text>
-                    <Text style={styles.sessionValue}>{session.total_km?.toFixed(2)} km</Text>
+                    <Text style={styles.sessionValue}>{session.travelledDistance?.toFixed(2)} km</Text>
                   </View>
                   <View style={styles.sessionCol}>
-                    <Text style={styles.sessionLabel}>Points Tracked</Text>
-                    <Text style={styles.sessionValue}>{session.total_points}</Text>
+                    <Text style={styles.sessionLabel}>Total Time</Text>
+                    <Text style={styles.sessionValue}>{session.totalTime ? formatBackendTime(session.totalTime) : '--:--'}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -192,7 +209,47 @@ export const RouteDetailScreen = ({ navigation }: any) => {
     .map((pt: any) => ({
       latitude: Number(pt.lat || pt.latitude),
       longitude: Number(pt.lng || pt.longitude),
+      datetime: pt.datetime || pt.recorded_at,
+      segment_km: pt.segment_km || 0
     })) || [];
+
+  let movingTimeMs = 0;
+  let idleTimeMs = 0;
+  let movingKm = 0;
+  let idleKm = 0;
+
+  if (routePoints.length > 1) {
+    for (let i = 1; i < routePoints.length; i++) {
+      const prev = routePoints[i - 1];
+      const curr = routePoints[i];
+      if (!prev.datetime || !curr.datetime) continue;
+
+      const timeA = new Date(prev.datetime).getTime();
+      const timeB = new Date(curr.datetime).getTime();
+      const diffMs = Math.max(0, timeB - timeA);
+
+      const diffHours = diffMs / (1000 * 60 * 60);
+      const speedKmh = diffHours > 0 ? (curr.segment_km / diffHours) : 0;
+
+      // If speed is less than 2 km/h, consider it idle/fluctuation.
+      if (speedKmh < 2.0) {
+        idleTimeMs += diffMs;
+        idleKm += (curr.segment_km || 0);
+      } else {
+        movingTimeMs += diffMs;
+        movingKm += (curr.segment_km || 0);
+      }
+    }
+  }
+
+  const formatDuration = (ms: number) => {
+    if (ms === 0) return '0m';
+    const totalMins = Math.floor(ms / 60000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
 
   const startLocation = routePoints.length > 0 ? routePoints[0] : null;
   const endLocation = routePoints.length > 0 ? routePoints[routePoints.length - 1] : null;
@@ -206,6 +263,16 @@ export const RouteDetailScreen = ({ navigation }: any) => {
   const punchOutTime = isOngoing ? 'Ongoing' : formatTimeStr(attendance?.check_out);
   const displayKm = isCorrectDate ? (activeSession?.total_km ?? routeData?.total_km) : undefined;
   const displayPoints = isCorrectDate ? (activeSession?.total_points ?? routeData?.total_points) : undefined;
+
+  const finalMovingKm = activeSession?.travelledDistance ?? routeData?.travelledDistance ?? movingKm;
+  const finalIdleKm = activeSession?.standingDistance ?? routeData?.standingDistance ?? idleKm;
+  const backendMovingTime = activeSession?.travelledTime ?? routeData?.travelledTime;
+  const backendIdleTime = activeSession?.standingTime ?? routeData?.standingTime;
+  const backendTotalTime = activeSession?.totalTime ?? routeData?.totalTime;
+
+  const displayMovingTime = backendMovingTime ? (formatBackendTime(backendMovingTime) ?? formatDuration(movingTimeMs)) : formatDuration(movingTimeMs);
+  const displayIdleTime = backendIdleTime ? (formatBackendTime(backendIdleTime) ?? formatDuration(idleTimeMs)) : formatDuration(idleTimeMs);
+  const displayTotalTime = backendTotalTime ? (formatBackendTime(backendTotalTime) ?? formatDuration(movingTimeMs + idleTimeMs)) : formatDuration(movingTimeMs + idleTimeMs);
 
   const punchInSelfie = activeSession?.punch_in_selfie;
   const punchOutSelfie = activeSession?.punch_out_selfie;
@@ -266,9 +333,24 @@ export const RouteDetailScreen = ({ navigation }: any) => {
         </View>
 
         <View style={styles.metricRow}>
-          <MetricTile label="Total distance" value={displayKm !== undefined ? displayKm.toFixed(1) : '0.0'} unit="km" />
-          <MetricTile label="Total points" value={displayPoints || 0} subtext="captured" />
+          <MetricTile label="Total Distance" value={displayKm !== undefined ? displayKm.toFixed(2) : '0.00'} unit="km" />
+          <MetricTile label="Total Time" value={displayTotalTime} subtext="tracked" />
         </View>
+
+        {(routePoints.length > 1 || backendMovingTime) && (
+          <View style={styles.metricRow}>
+            <MetricTile
+              label="Travelled Time"
+              value={displayMovingTime}
+              subtext={`${finalMovingKm.toFixed(2)} km covered`}
+            />
+            <MetricTile
+              label="Standing Time"
+              value={displayIdleTime}
+              subtext={`${finalIdleKm.toFixed(2)} km fluctuation`}
+            />
+          </View>
+        )}
 
         <View style={styles.detailCard}>
           <View style={styles.detailRow}>

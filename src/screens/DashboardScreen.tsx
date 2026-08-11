@@ -6,6 +6,9 @@ import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceSettingsModal } from '../components/DeviceSettingsModal';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
@@ -36,15 +39,17 @@ export const DashboardScreen = ({ navigation }: any) => {
   const { liveKmData, kmSummaryData, routeData } = useSelector((state: RootState) => state.tracking);
   const { user, isManager } = useSelector((state: RootState) => state.auth);
   const [exitModalVisible, setExitModalVisible] = React.useState(false);
+  const [deviceModalVisible, setDeviceModalVisible] = React.useState(false);
+  const [deviceBrand, setDeviceBrand] = React.useState('');
 
   const sessions = routeData?.attendance_sessions || [];
   const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
   const isTrackingActive = !!sessions.find((s: any) => !s.attendance?.check_out);
 
-  const isCheckedIn = dashboardData?.attendance_state === 'checked_in' || 
-                      dashboardData?.can_punch_out || 
-                      (statusData?.has_punched_in_today && !statusData?.has_punched_out_today) ||
-                      isTrackingActive;
+  const isCheckedIn = dashboardData?.attendance_state === 'checked_in' ||
+    dashboardData?.can_punch_out ||
+    (statusData?.has_punched_in_today && !statusData?.has_punched_out_today) ||
+    isTrackingActive;
 
   const formatTime = (time: number | undefined) => {
     if (time === undefined || time === null) return '';
@@ -61,18 +66,18 @@ export const DashboardScreen = ({ navigation }: any) => {
   };
 
   const getGreeting = () => {
-  const hour = new Date().getHours();
-  
-  if (hour >= 5 && hour < 12) {
-    return 'Good morning';
-  } else if (hour >= 12 && hour < 17) {
-    return 'Good afternoon';
-  } else if (hour >= 17 && hour < 21) {
-    return 'Good evening';
-  } else {
-    return 'Good night';
-  }
-};
+    const hour = new Date().getHours();
+
+    if (hour >= 5 && hour < 12) {
+      return 'Good morning';
+    } else if (hour >= 12 && hour < 17) {
+      return 'Good afternoon';
+    } else if (hour >= 17 && hour < 21) {
+      return 'Good evening';
+    } else {
+      return 'Good night';
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -86,10 +91,10 @@ export const DashboardScreen = ({ navigation }: any) => {
       // Fetch today's daily KM as a baseline
       const today = new Date().toISOString().split('T')[0];
       dispatch(fetchDailyKm(today));
-      
+
       // Fetch Route Data to get active sessions reliably
       dispatch(fetchRouteData(today));
-      
+
       // Fetch KM Summary for the dashboard metric tiles
       dispatch(fetchKmSummary('today,month'));
 
@@ -106,7 +111,7 @@ export const DashboardScreen = ({ navigation }: any) => {
       return () => backHandler.remove();
     }, [dispatch])
   );
-  
+
 
   React.useEffect(() => {
     Animated.loop(
@@ -128,7 +133,7 @@ export const DashboardScreen = ({ navigation }: any) => {
   // Auto-resume background tracking if app was killed and reopened
   React.useEffect(() => {
     if (dashboardData?.attendance_state === 'checked_in' && user?.track_live_location !== false) {
-      LocationService.startTracking().catch((err) => 
+      LocationService.startTracking().catch((err) =>
         console.warn('Dashboard: Failed to auto-resume tracking:', err)
       );
     }
@@ -145,6 +150,32 @@ export const DashboardScreen = ({ navigation }: any) => {
     }
   }, [dashboardData, isManager, dispatch]);
 
+  React.useEffect(() => {
+    const checkDeviceSettings = async () => {
+      try {
+        let brand = '';
+        if (Platform.OS === 'android') {
+          brand = String(Platform.constants.Brand || Platform.constants.Manufacturer || '');
+        }
+        const lowerBrand = brand.toLowerCase();
+
+        if (['vivo', 'oppo', 'oneplus'].includes(lowerBrand)) {
+          const today = new Date().toISOString().split('T')[0];
+          const lastShown = await AsyncStorage.getItem('@last_device_settings_shown');
+
+          if (lastShown !== today) {
+            setDeviceBrand(lowerBrand);
+            setDeviceModalVisible(true);
+            await AsyncStorage.setItem('@last_device_settings_shown', today);
+          }
+        }
+      } catch (err) {
+        console.warn('Device info error:', err);
+      }
+    };
+    checkDeviceSettings();
+  }, []);
+
   // Sync any remaining offline data on component mount
   React.useEffect(() => {
     LocationService.syncOfflineQueue().catch((err) =>
@@ -159,12 +190,12 @@ export const DashboardScreen = ({ navigation }: any) => {
         <View style={styles.headerLeft}>
           {/* <Text style={styles.greeting}>Good morning, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}</Text> */}
           <Text style={styles.greeting}>
-  {getGreeting()}, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}
-</Text>
+            {getGreeting()}, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}
+          </Text>
           <Text style={styles.subGreeting}>{dashboardData?.employee?.designation || 'Employee'} · {dashboardData?.employee?.employee_code || ''}</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.avatar} 
+        <TouchableOpacity
+          style={styles.avatar}
           onPress={() => navigation.navigate('Profile')}
           activeOpacity={0.8}
         >
@@ -174,7 +205,7 @@ export const DashboardScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Premium Punch Card */}
         <View style={styles.punchCard}>
           {/* Decorative Background Elements */}
@@ -193,13 +224,13 @@ export const DashboardScreen = ({ navigation }: any) => {
             {isCheckedIn ? 'Currently Punched In' : 'Ready for work?'}
           </Text>
           <Text style={styles.punchSubStatus}>
-            {isCheckedIn 
-              ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.` 
+            {isCheckedIn
+              ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.`
               : "You haven't punched in yet today."}
           </Text>
-          
+
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.punchBtn}
               activeOpacity={0.9}
               onPress={() => {
@@ -222,15 +253,33 @@ export const DashboardScreen = ({ navigation }: any) => {
 
         {user?.track_live_location !== false && dashboardData?.employee?.track_live_location !== false && (
           <View style={styles.metricRow}>
-            <MetricTile 
+            {/* <MetricTile 
               label="KM Today" 
               value={liveKmData?.live_km !== undefined ? liveKmData.live_km.toFixed(1) : (kmSummaryData?.today?.total_km !== undefined ? kmSummaryData.today.total_km.toFixed(1) : "0.0")} 
               unit="km" 
+            /> */}
+            <MetricTile
+              label="KM Today"
+              value={
+                kmSummaryData?.today?.travelledDistance !== undefined
+                  ? kmSummaryData.today.travelledDistance.toFixed(1)
+                  : "0.0"
+              }
+              unit="km"
             />
-            <MetricTile 
-              label="KM Month" 
-              value={kmSummaryData?.month?.total_km !== undefined ? kmSummaryData.month.total_km.toFixed(1) : "0.0"} 
-              unit="km" 
+            {/* <MetricTile
+              label="KM Month"
+              value={kmSummaryData?.month?.total_km !== undefined ? kmSummaryData.month.total_km.toFixed(1) : "0.0"}
+              unit="km"
+            /> */}
+            <MetricTile
+              label="KM Month"
+              value={
+                kmSummaryData?.month?.travelledDistance !== undefined
+                  ? kmSummaryData.month.travelledDistance.toFixed(1)
+                  : "0.0"
+              }
+              unit="km"
             />
           </View>
         )}
@@ -244,9 +293,9 @@ export const DashboardScreen = ({ navigation }: any) => {
         {(isManager || dashboardData?.is_manager) && (
           <>
             <Text style={styles.sectionTitle}>Manager Actions</Text>
-            
-            <TouchableOpacity 
-              style={[styles.shiftCard, { marginTop: 4 }]} 
+
+            <TouchableOpacity
+              style={[styles.shiftCard, { marginTop: 4 }]}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('ManagerExpenseListScreen')}
             >
@@ -260,8 +309,8 @@ export const DashboardScreen = ({ navigation }: any) => {
               <Icon name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.shiftCard, { marginTop: 12 }]} 
+            <TouchableOpacity
+              style={[styles.shiftCard, { marginTop: 12 }]}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('ManagerRegularisationListScreen')}
             >
@@ -275,8 +324,8 @@ export const DashboardScreen = ({ navigation }: any) => {
               <Icon name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.shiftCard, { marginTop: 12 }]} 
+            <TouchableOpacity
+              style={[styles.shiftCard, { marginTop: 12 }]}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('ManagerLeaveListScreen')}
             >
@@ -302,7 +351,7 @@ export const DashboardScreen = ({ navigation }: any) => {
           <View style={styles.shiftLeft}>
             <Text style={styles.shiftName}>Current: {shiftData?.name || dashboardData?.shift?.name || dashboardData?.employee?.shift?.name || 'GEN'}</Text>
             <Text style={styles.shiftTime}>
-              {shiftData?.sessions?.length > 0 
+              {shiftData?.sessions?.length > 0
                 ? `${formatTime(shiftData.sessions[0].in_time)} - ${formatTime(shiftData.sessions[shiftData.sessions.length - 1].out_time)}`
                 : '09:30 - 18:00'}
             </Text>
@@ -321,13 +370,13 @@ export const DashboardScreen = ({ navigation }: any) => {
           <View style={styles.shiftLeft}>
             <Text style={styles.shiftName}>Assigned: {assignedData?.name || dashboardData?.shift?.name || dashboardData?.employee?.shift?.name || 'GEN'}</Text>
             <Text style={styles.shiftTime}>
-              {assignedData?.sessions?.length > 0 
+              {assignedData?.sessions?.length > 0
                 ? `${formatTime(assignedData.sessions[0].in_time)} - ${formatTime(assignedData.sessions[assignedData.sessions.length - 1].out_time)}`
                 : '09:30 - 18:00'}
             </Text>
           </View>
         </View>
-        
+
         <View style={{ height: 20 }} />
       </ScrollView>
 
@@ -340,6 +389,12 @@ export const DashboardScreen = ({ navigation }: any) => {
         onPrimaryPress={() => BackHandler.exitApp()}
         secondaryButtonText="Cancel"
         onSecondaryPress={() => setExitModalVisible(false)}
+      />
+
+      <DeviceSettingsModal
+        visible={deviceModalVisible}
+        brand={deviceBrand}
+        onClose={() => setDeviceModalVisible(false)}
       />
     </SafeAreaView>
   );
