@@ -109,7 +109,7 @@ export const ServerUrlScreen = ({ navigation }: any) => {
 
             <InputField
               label="URL"
-              placeholder="e.g. https://laxmidatta.nakshatrainfo.co.in"
+              placeholder="Enter your URL"
               value={url}
               onChangeText={setUrl}
               leftIcon="link-variant"

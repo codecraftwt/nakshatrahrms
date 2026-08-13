@@ -17,7 +17,7 @@ export const ManagerLeaveListScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
-  
+
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' as any });
 
   const { approvalsData, approvalsLoading } = useSelector((state: RootState) => state.leave);
@@ -29,13 +29,13 @@ export const ManagerLeaveListScreen = ({ navigation }: any) => {
   );
 
   const renderLeaveItem = (item: any) => {
-    const employeeName = item.approver_name || item.employee?.name || (Array.isArray(item.employee_id) ? item.employee_id[1] : item.employee_id?.name) || 'Employee';
+    const employeeName = item.employee?.name || (Array.isArray(item.employee_id) ? item.employee_id[1] : item.employee_id?.name) || 'Employee';
     const typeName = item.leave_type?.name || 'Leave';
     const date = item.from ? item.from.split(' ')[0] : (item.start_date || '');
 
     return (
-      <TouchableOpacity 
-        key={item.id} 
+      <TouchableOpacity
+        key={item.id}
         style={styles.listCard}
         activeOpacity={0.8}
         onPress={() => navigation.navigate('ManagerLeaveDetailScreen', { leave: item })}
@@ -91,7 +91,7 @@ export const ManagerLeaveListScreen = ({ navigation }: any) => {
         </View>
         <View style={{ height: 20 + insets.bottom }} />
       </ScrollView>
-      
+
       <CustomAlertModal
         visible={alertConfig.visible}
         title={alertConfig.title}

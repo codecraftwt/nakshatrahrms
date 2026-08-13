@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchLeaveDetail, cancelLeave, resetCancelSuccess } from '../redux/slice/leaveSlice';
 import { RootState, AppDispatch } from '../redux/store';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 export const LeaveDetailScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -24,6 +25,19 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    onPrimaryPress: () => { setAlertVisible(false); },
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info', onPrimaryPress: () => void = () => setAlertVisible(false)) => {
+    setAlertConfig({ title, message, type, onPrimaryPress });
+    setAlertVisible(true);
+  };
 
   const dispatch = useDispatch<AppDispatch>();
   const { leaveDetailData, leaveDetailLoading, cancelLoading, cancelSuccess, cancelError } = useSelector((state: RootState) => state.leave);
@@ -43,15 +57,17 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
       setIsSuccessModalVisible(true);
     }
     if (cancelError) {
-      Alert.alert('Error', cancelError);
-      dispatch(resetCancelSuccess());
+      showAlert('Error', cancelError, 'error', () => {
+        setAlertVisible(false);
+        dispatch(resetCancelSuccess());
+      });
     }
   }, [cancelSuccess, cancelError]);
 
 
   const handleCancelSubmit = () => {
     if (!cancelReason.trim()) {
-      Alert.alert('Validation Error', 'Please provide a reason for cancellation.');
+      showAlert('Validation Error', 'Please provide a reason for cancellation.', 'error');
       return;
     }
     dispatch(cancelLeave({ id: leaveId, reason: cancelReason }));
@@ -216,6 +232,14 @@ export const LeaveDetailScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      <CustomAlertModal
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onPrimaryPress={alertConfig.onPrimaryPress}
+      />
     </SafeAreaView>
   );
 };

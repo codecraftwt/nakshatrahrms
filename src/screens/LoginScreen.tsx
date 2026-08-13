@@ -51,63 +51,63 @@ export const LoginScreen = ({ navigation }: any) => {
         extraScrollHeight={Platform.OS === 'ios' ? 0 : 20}
       >
 
-          <View style={styles.headerArea}>
-            <View style={styles.logoCircle}>
-              <View style={{ transform: [{ rotate: '-45deg' }] }}>
-                <Icon name="map-marker-radius" size={40} color="#FFFFFF" />
-              </View>
+        <View style={styles.headerArea}>
+          <View style={styles.logoCircle}>
+            <View style={{ transform: [{ rotate: '-45deg' }] }}>
+              <Icon name="map-marker-radius" size={40} color="#FFFFFF" />
             </View>
-            <Text style={styles.brandName}>Nakshatra</Text>
-            <Text style={styles.brandSub}>Solutions HRMS</Text>
           </View>
+          <Text style={styles.brandName}>Nakshatra</Text>
+          <Text style={styles.brandSub}>Solutions HRMS</Text>
+        </View>
 
-          <View style={styles.card}>
-            <Text style={styles.heading}>Welcome back</Text>
-            <Text style={styles.subheading}>Sign in to continue</Text>
+        <View style={styles.card}>
+          <Text style={styles.heading}>Welcome back</Text>
+          <Text style={styles.subheading}>Sign in to continue</Text>
 
-            <InputField
-              label="Employee ID / Email"
-              placeholder="emp@company.com"
-              value={email}
-              onChangeText={setEmail}
-              leftIcon="email-outline"
-            />
+          <InputField
+            label="Employee ID / Email"
+            placeholder="emp@company.com"
+            value={email}
+            onChangeText={setEmail}
+            leftIcon="email-outline"
+          />
 
-            <InputField
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              leftIcon="lock-outline"
-            />
+          <InputField
+            label="Password"
+            placeholder="••••••••"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            leftIcon="lock-outline"
+          />
 
-            <View style={styles.forgotPasswordContainer}>
-              <TouchableOpacity>
-                <Text style={styles.forgotPassword}>Forgot password?</Text>
-              </TouchableOpacity>
-            </View>
+          {/* <View style={styles.forgotPasswordContainer}>
+            <TouchableOpacity>
+              <Text style={styles.forgotPassword}>Forgot password?</Text>
+            </TouchableOpacity>
+          </View> */}
 
-            {error ? (
-              <Text style={{ color: colors.error || 'red', marginBottom: 16, textAlign: 'center', fontSize: 14 }}>
-                {error}
-              </Text>
-            ) : null}
+          {error ? (
+            <Text style={{ color: colors.error || 'red', marginBottom: 16, textAlign: 'center', fontSize: 14 }}>
+              {error}
+            </Text>
+          ) : null}
 
-            <PrimaryButton
-              label={loading ? "Signing in..." : "Sign in"}
-              onPress={handleLogin}
-              disabled={loading || !email || !password}
-              style={styles.signInButton}
-            />
-
+          <PrimaryButton
+            label={loading ? "Signing in..." : "Sign in"}
+            onPress={handleLogin}
+            disabled={loading || !email || !password}
+            style={styles.signInButton}
+          />
+          {/* 
             <View style={[styles.registerContainer, { marginTop: 32 }]}>
               <Text style={styles.registerText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
                 <Text style={styles.registerLink}>Register now</Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </View> */}
+        </View>
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );

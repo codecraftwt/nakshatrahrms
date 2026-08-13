@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform, Alert, Switch, StatusBar } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Switch, StatusBar } from 'react-native';
 import { AppText as Text } from '../components/AppText';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { GlassDateTimePickerModal } from '../components/GlassDateTimePickerModal';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -15,6 +15,7 @@ import { ThemeColors } from '../theme/colors';
 import { InputField } from '../components/InputField';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Typography } from '../theme/typography';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 export const ApplyLeaveScreen = ({ navigation }: any) => {
   const [type, setType] = useState<any>(null);
@@ -25,6 +26,19 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
+
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    onPrimaryPress: () => { setAlertVisible(false); },
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info', onPrimaryPress: () => void = () => setAlertVisible(false)) => {
+    setAlertConfig({ title, message, type, onPrimaryPress });
+    setAlertVisible(true);
+  };
 
   const dispatch = useDispatch<AppDispatch>();
   const { typesData, balanceData, applyLoading, applySuccess, applyError } = useSelector((state: RootState) => state.leave);
@@ -44,13 +58,17 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
 
   React.useEffect(() => {
     if (applySuccess) {
-      Alert.alert('Success', 'Leave request submitted successfully!');
-      dispatch(resetApplySuccess());
-      navigation.goBack();
+      showAlert('Success', 'Leave request submitted successfully!', 'success', () => {
+        setAlertVisible(false);
+        dispatch(resetApplySuccess());
+        navigation.goBack();
+      });
     }
     if (applyError) {
-      Alert.alert('Error', applyError);
-      dispatch(resetApplySuccess());
+      showAlert('Error', applyError, 'error', () => {
+        setAlertVisible(false);
+        dispatch(resetApplySuccess());
+      });
     }
   }, [applySuccess, applyError]);
 
@@ -61,8 +79,7 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const isFocused = useIsFocused();
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowPicker(Platform.OS === 'ios');
+  const handleDateChange = (selectedDate: Date) => {
     if (selectedDate) {
       if (pickerMode === 'start') {
         setStartDate(selectedDate);
@@ -83,7 +100,7 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
 
   const handleSubmit = () => {
     if (!type || !reason) {
-      Alert.alert('Validation Error', 'Please select a leave type and provide a reason.');
+      showAlert('Validation Error', 'Please select a leave type and provide a reason.', 'error');
       return;
     }
     const payload: any = {
@@ -212,17 +229,27 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
               disabled={applyLoading}
             />
 
-            {showPicker && (
-              <DateTimePicker
-                value={pickerMode === 'start' ? startDate : endDate}
-                mode="date"
-                display="default"
-                themeVariant={theme}
-                onChange={handleDateChange}
-              />
-            )}
+            <GlassDateTimePickerModal
+              visible={showPicker}
+              mode="date"
+              title={pickerMode === 'start' ? "Select Start Date" : "Select End Date"}
+              initialDate={pickerMode === 'start' ? startDate : endDate}
+              onSave={(selectedDate) => {
+                handleDateChange(selectedDate);
+                setShowPicker(false);
+              }}
+              onClose={() => setShowPicker(false)}
+            />
           </View>
       </KeyboardAwareScrollView>
+
+      <CustomAlertModal
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onPrimaryPress={alertConfig.onPrimaryPress}
+      />
     </SafeAreaView>
   );
 };

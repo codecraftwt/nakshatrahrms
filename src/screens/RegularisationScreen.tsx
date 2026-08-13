@@ -9,7 +9,7 @@ import { ThemeColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { InputField } from '../components/InputField';
 import { PrimaryButton } from '../components/PrimaryButton';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { GlassDateTimePickerModal } from '../components/GlassDateTimePickerModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { createRegularization } from '../redux/slice/regularisationSlice';
@@ -18,10 +18,7 @@ export const RegularisationScreen = ({ navigation }: any) => {
   const [fromDate, setFromDate] = useState(new Date());
   const [toDate, setToDate] = useState(new Date());
   
-  const [showFromPicker, setShowFromPicker] = useState(false);
-  const [showFromTimePicker, setShowFromTimePicker] = useState(false);
-  const [showToPicker, setShowToPicker] = useState(false);
-  const [showToTimePicker, setShowToTimePicker] = useState(false);
+  const [activePicker, setActivePicker] = useState<'FROM' | 'TO' | null>(null);
 
   const [customAlert, setCustomAlert] = useState<{ visible: boolean, title: string, message: string }>({
     visible: false, title: '', message: ''
@@ -130,7 +127,7 @@ export const RegularisationScreen = ({ navigation }: any) => {
           value={formatDateForDisplay(fromDate)}
           onChangeText={() => {}}
           rightIcon="calendar-clock"
-          onPress={() => setShowFromPicker(true)}
+          onPress={() => setActivePicker('FROM')}
         />
 
         <InputField
@@ -139,7 +136,7 @@ export const RegularisationScreen = ({ navigation }: any) => {
           value={formatDateForDisplay(toDate)}
           onChangeText={() => {}}
           rightIcon="calendar-clock"
-          onPress={() => setShowToPicker(true)}
+          onPress={() => setActivePicker('TO')}
         />
 
         <PrimaryButton 
@@ -150,72 +147,27 @@ export const RegularisationScreen = ({ navigation }: any) => {
         />
       </ScrollView>
 
-      {showFromPicker && (
-        <DateTimePicker
-          value={fromDate}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowFromPicker(false);
-            if (selectedDate) {
-              const newDate = new Date(fromDate);
-              newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-              setFromDate(newDate);
-              setTimeout(() => setShowFromTimePicker(true), 500); // Open time picker after date
-            }
-          }}
-        />
-      )}
+      <GlassDateTimePickerModal 
+        visible={activePicker === 'FROM'}
+        title="Select Start Date & Time"
+        initialDate={fromDate}
+        onSave={(date) => {
+          setFromDate(date);
+          setActivePicker(null);
+        }}
+        onClose={() => setActivePicker(null)}
+      />
 
-      {showFromTimePicker && (
-        <DateTimePicker
-          value={fromDate}
-          mode="time"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowFromTimePicker(false);
-            if (selectedDate) {
-              const newDate = new Date(fromDate);
-              newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0);
-              setFromDate(newDate);
-            }
-          }}
-        />
-      )}
-
-      {showToPicker && (
-        <DateTimePicker
-          value={toDate}
-          mode="date"
-          display="default"
-          minimumDate={fromDate}
-          onChange={(event, selectedDate) => {
-            setShowToPicker(false);
-            if (selectedDate) {
-              const newDate = new Date(toDate);
-              newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-              setToDate(newDate);
-              setTimeout(() => setShowToTimePicker(true), 500);
-            }
-          }}
-        />
-      )}
-
-      {showToTimePicker && (
-        <DateTimePicker
-          value={toDate}
-          mode="time"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowToTimePicker(false);
-            if (selectedDate) {
-              const newDate = new Date(toDate);
-              newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0);
-              setToDate(newDate);
-            }
-          }}
-        />
-      )}
+      <GlassDateTimePickerModal 
+        visible={activePicker === 'TO'}
+        title="Select End Date & Time"
+        initialDate={toDate}
+        onSave={(date) => {
+          setToDate(date);
+          setActivePicker(null);
+        }}
+        onClose={() => setActivePicker(null)}
+      />
 
       {renderCustomAlert()}
     </SafeAreaView>

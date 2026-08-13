@@ -190,16 +190,16 @@ export const DashboardScreen = ({ navigation }: any) => {
         <View style={styles.headerLeft}>
           {/* <Text style={styles.greeting}>Good morning, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}</Text> */}
           <Text style={styles.greeting}>
-            {getGreeting()}, {dashboardData?.employee?.name?.split(' ')[0] || 'User'}
+            {getGreeting()}, {dashboardData?.employee?.name?.split(' ')[0] || user?.employee?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'User'}
           </Text>
-          <Text style={styles.subGreeting}>{dashboardData?.employee?.designation || 'Employee'} · {dashboardData?.employee?.employee_code || ''}</Text>
+          <Text style={styles.subGreeting}>{dashboardData?.employee?.designation || user?.employee?.designation || 'Employee'} · {dashboardData?.employee?.employee_code || user?.employee?.employee_code || ''}</Text>
         </View>
         <TouchableOpacity
           style={styles.avatar}
           onPress={() => navigation.navigate('Profile')}
           activeOpacity={0.8}
         >
-          <Text style={styles.avatarText}>{dashboardData?.employee?.name ? dashboardData.employee.name.charAt(0) : 'U'}</Text>
+          <Text style={styles.avatarText}>{dashboardData?.employee?.name ? dashboardData.employee.name.charAt(0) : (user?.employee?.name ? user.employee.name.charAt(0) : (user?.name ? user.name.charAt(0) : 'U'))}</Text>
           <View style={styles.onlineDot} />
         </TouchableOpacity>
       </View>

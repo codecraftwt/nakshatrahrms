@@ -15,15 +15,15 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
-  
+
   const { leave } = route.params;
   const [loadingAction, setLoadingAction] = useState<'approve' | 'refuse' | null>(null);
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' as any });
 
-  const employeeName = leave.approver_name || leave.employee?.name || (Array.isArray(leave.employee_id) ? leave.employee_id[1] : leave.employee_id?.name) || 'Employee';
+  const employeeName = leave.employee?.name || (Array.isArray(leave.employee_id) ? leave.employee_id[1] : leave.employee_id?.name) || 'Employee';
   const typeName = leave.leave_type?.name || 'Leave';
   const date = leave.from ? leave.from.split(' ')[0] : (leave.start_date || '');
-  
+
   const getStatusLabel = (state: string) => {
     if (!state) return 'Pending';
     if (state === 'to_approve' || state === 'pending') return 'Pending';
@@ -33,7 +33,7 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
   };
   const statusLabel = getStatusLabel(leave.status || leave.state);
 
-  const departmentName = leave.department?.name || 'Department';
+  const departmentName = leave.employee?.department?.name || leave.department?.name || 'N/A';
   const reason = leave.reason || '';
   const endDate = leave.to ? leave.to.split(' ')[0] : (leave.end_date || '');
   const days = leave.number_of_days !== undefined ? leave.number_of_days : '';
@@ -98,7 +98,7 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
         {/* Details Card */}
         <View style={styles.detailCard}>
           <Text style={styles.sectionTitle}>General Information</Text>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Employee</Text>
             <View style={styles.employeeRow}>
@@ -108,14 +108,14 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
               <Text style={styles.detailValue}>{employeeName}</Text>
             </View>
           </View>
-          
+
           <View style={styles.divider} />
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Department</Text>
             <Text style={styles.detailValue}>{departmentName}</Text>
           </View>
-          
+
           <View style={styles.divider} />
 
           <View style={styles.detailRow}>
@@ -158,8 +158,8 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
 
       {/* Floating Action Bar */}
       <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity 
-          style={[styles.actionBtn, styles.refuseBtn]} 
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.refuseBtn]}
           onPress={handleRefuse}
           disabled={loadingAction !== null}
         >
@@ -172,9 +172,9 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
             </>
           )}
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionBtn, styles.approveBtn]} 
+
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.approveBtn]}
           onPress={handleApprove}
           disabled={loadingAction !== null}
         >
@@ -188,7 +188,7 @@ export const ManagerLeaveDetailScreen = ({ route, navigation }: any) => {
           )}
         </TouchableOpacity>
       </View>
-      
+
       <CustomAlertModal
         visible={alertConfig.visible}
         title={alertConfig.title}

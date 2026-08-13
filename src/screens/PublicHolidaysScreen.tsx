@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -11,7 +11,9 @@ import { fetchPublicHolidays, clearHolidayData } from '../redux/slice/holidaySli
 
 export const PublicHolidaysScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
-  const styles = createStyles(colors);
+  const { width } = useWindowDimensions();
+  const isSmallDevice = width < 375;
+  const styles = createStyles(colors, isSmallDevice);
   const dispatch = useDispatch<AppDispatch>();
 
   const { publicHolidaysData, publicHolidaysLoading, publicHolidaysError } = useSelector((state: RootState) => state.holiday);
@@ -23,50 +25,71 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
     };
   }, [dispatch]);
 
-  const renderHolidayItem = (item: any, index: number) => {
-    const name = item.name || 'Holiday';
-    const dateStr = item.date_from || item.date || item.start_date || '';
+  const MONTH_NAMES = [
+    "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+  ];
+
+  const renderMonthCalendar = (monthIndex: number, data: any) => {
+    const { year, days, holidaysList } = data;
     
-    let displayDayNum = '';
-    let displayMonth = '';
-    let displayDayOfWeek = '';
+    // Calculate calendar grid
+    const firstDay = new Date(year, monthIndex, 1).getDay();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     
-    if (dateStr) {
-      try {
-        const safeDateStr = dateStr.replace(' ', 'T');
-        const d = new Date(safeDateStr);
-        if (!isNaN(d.getTime())) {
-          displayDayNum = d.toLocaleDateString('en-US', { day: 'numeric' });
-          displayMonth = d.toLocaleDateString('en-US', { month: 'short' });
-          displayDayOfWeek = d.toLocaleDateString('en-US', { weekday: 'long' });
-        }
-      } catch (e) {}
+    const grid = [];
+    for (let i = 0; i < firstDay; i++) {
+      grid.push(null);
     }
-
-    const contracts = item.contract_type_ids || [];
-
+    for (let i = 1; i <= daysInMonth; i++) {
+      grid.push(i);
+    }
+    
     return (
-      <View key={item.id || index} style={styles.holidayCard}>
-        <View style={styles.dateBadge}>
-          <Text style={styles.dateDay}>{displayDayNum || dateStr.split('-')[2]?.split(' ')[0]}</Text>
-          <Text style={styles.dateMonth}>{displayMonth || dateStr.split('-')[1]}</Text>
+      <View key={monthIndex} style={styles.calendarCard}>
+        <View style={styles.calendarHeader}>
+          <Text style={styles.monthName}>{MONTH_NAMES[monthIndex]}</Text>
+          <View style={styles.monthNumberBadge}>
+            <Text style={styles.monthNumberText}>{String(monthIndex + 1).padStart(2, '0')}</Text>
+          </View>
         </View>
         
-        <View style={styles.infoContainer}>
-          <Text style={styles.nameText}>{name}</Text>
-          <Text style={styles.dayText}>{displayDayOfWeek}</Text>
-          {contracts.length > 0 && (
-            <View style={styles.contractContainer}>
-              {contracts.map((c: any) => (
-                <View key={c.id} style={styles.contractBadge}>
-                  <Text style={styles.contractText}>{c.name}</Text>
-                </View>
-              ))}
+        <View style={styles.calendarBody}>
+          <View style={styles.daysOfWeekRow}>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <Text key={`dow-${i}`} style={styles.dayOfWeekText}>{d}</Text>
+            ))}
+          </View>
+          
+          <View style={styles.daysGrid}>
+            {grid.map((dayNum, i) => {
+               const isHoliday = dayNum ? !!days[dayNum] : false;
+               return (
+                 <View key={`day-${i}`} style={styles.dayCellContainer}>
+                   <View style={[styles.dayCell, isHoliday && styles.holidayCell]}>
+                     <Text style={[styles.dayText, isHoliday && styles.holidayText]}>{dayNum || ''}</Text>
+                   </View>
+                 </View>
+               )
+            })}
+          </View>
+
+          {holidaysList.length > 0 && (
+            <View style={styles.holidayListContainer}>
+              {holidaysList.map((h: any, idx: number) => {
+                const dayNum = new Date(h.dateObj).getDate();
+                const name = h.name || 'Holiday';
+                return (
+                  <View key={idx} style={styles.holidayRow}>
+                    <View style={styles.holidayDot} />
+                    <Text style={styles.holidayRowDate}>{String(dayNum).padStart(2, '0')} {MONTH_NAMES[monthIndex].substring(0, 3)}</Text>
+                    <Text style={styles.holidayRowName} numberOfLines={2}>{name}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
-
-        <Icon name="calendar-star" size={24} color="#9C27B0" style={{ opacity: 0.5 }} />
       </View>
     );
   };
@@ -92,7 +115,6 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
       );
     }
 
-    // Adjust according to the API response structure
     const records = publicHolidaysData?.data?.records || publicHolidaysData?.records || (Array.isArray(publicHolidaysData) ? publicHolidaysData : []);
 
     if (records.length === 0) {
@@ -104,9 +126,36 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
       );
     }
 
+    // Grouping holidays by month
+    const groupedHolidays = records.reduce((acc: any, curr: any) => {
+      const dateStr = curr.date_from || curr.date || curr.start_date || '';
+      if (!dateStr) return acc;
+      
+      const safeDateStr = dateStr.replace(' ', 'T');
+      const d = new Date(safeDateStr);
+      if (isNaN(d.getTime())) return acc;
+      
+      const month = d.getMonth();
+      if (!acc[month]) {
+        acc[month] = {
+           year: d.getFullYear(),
+           monthIndex: month,
+           days: {},
+           holidaysList: []
+        };
+      }
+      acc[month].days[d.getDate()] = true;
+      acc[month].holidaysList.push({ ...curr, dateObj: d });
+      return acc;
+    }, {});
+
+    const sortedMonths = Object.keys(groupedHolidays).map(Number).sort((a, b) => a - b);
+
     return (
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        {records.map((item: any, index: number) => renderHolidayItem(item, index))}
+        <View style={styles.gridContainer}>
+          {sortedMonths.map(monthIndex => renderMonthCalendar(monthIndex, groupedHolidays[monthIndex]))}
+        </View>
       </ScrollView>
     );
   };
@@ -126,7 +175,7 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
   );
 };
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = (colors: ThemeColors, isSmallDevice: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgPage,
@@ -151,74 +200,128 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textPrimary,
   },
   listContent: {
-    padding: 16,
-    gap: 12,
+    padding: 12,
   },
-  holidayCard: {
+  gridContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  calendarCard: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 16,
+    width: '48.5%', // 2 per row responsively
+    borderRadius: 8,
+    borderBottomRightRadius: 20, // Matches the screenshot proportionally
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    borderLeftWidth: 4,
-    borderLeftColor: '#9C27B0',
+    borderColor: '#D0E4F2', 
+    marginBottom: 12,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
-  dateBadge: {
-    backgroundColor: '#9C27B010',
-    padding: 10,
-    borderRadius: 12,
+  calendarHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 60,
-    marginRight: 16,
+    justifyContent: 'space-between',
+    paddingLeft: 6,
   },
-  dateDay: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#9C27B0',
-  },
-  dateMonth: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9C27B0',
-    marginTop: 2,
-  },
-  infoContainer: {
-    flex: 1,
-  },
-  nameText: {
-    fontSize: 16,
-    fontWeight: '600',
+  monthName: {
+    fontSize: isSmallDevice ? 10 : 11,
+    fontWeight: '800',
     color: colors.textPrimary,
-    marginBottom: 4,
+    letterSpacing: 0.5,
   },
-  dayText: {
-    fontSize: 13,
-    color: colors.textSecondary,
+  monthNumberBadge: {
+    backgroundColor: '#F26D21', 
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderBottomLeftRadius: 8,
   },
-  contractContainer: {
+  monthNumberText: {
+    color: '#FFFFFF',
+    fontSize: isSmallDevice ? 12 : 13,
+    fontWeight: '800',
+  },
+  calendarBody: {
+    padding: 0,
+  },
+  daysOfWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary, 
+    paddingVertical: 2,
+  },
+  dayOfWeekText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '700',
+    width: `${100/7}%`,
+    textAlign: 'center',
+  },
+  daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 6,
-    gap: 4,
+    padding: 2,
   },
-  contractBadge: {
-    backgroundColor: '#9C27B015',
+  dayCellContainer: {
+    width: `${100/7}%`,
+    height: isSmallDevice ? 18 : 22, // Fixed height makes it compact and rectangular like the image
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#EEEEEE',
+  },
+  dayCell: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  holidayCell: {
+    backgroundColor: '#F26D21', 
+  },
+  dayText: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  holidayText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  holidayListContainer: {
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingBottom: 8,
+    gap: 2,
   },
-  contractText: {
-    fontSize: 10,
-    color: '#9C27B0',
-    fontWeight: '500',
+  holidayRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 2,
+  },
+  holidayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#F26D21',
+    marginTop: 5,
+    marginRight: 4,
+  },
+  holidayRowDate: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#F26D21',
+    width: 28,
+    marginTop: 1,
+  },
+  holidayRowName: {
+    fontSize: 8,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 11,
   },
   centerContainer: {
     flex: 1,

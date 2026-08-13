@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { fetchPayslips } from '../redux/slice/payrollSlice';
@@ -13,6 +13,22 @@ import { useFocusEffect } from '@react-navigation/native';
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
+];
+
+const MONTHS = [
+  { id: 0, name: 'All' },
+  { id: 1, name: 'Jan' },
+  { id: 2, name: 'Feb' },
+  { id: 3, name: 'Mar' },
+  { id: 4, name: 'Apr' },
+  { id: 5, name: 'May' },
+  { id: 6, name: 'Jun' },
+  { id: 7, name: 'Jul' },
+  { id: 8, name: 'Aug' },
+  { id: 9, name: 'Sep' },
+  { id: 10, name: 'Oct' },
+  { id: 11, name: 'Nov' },
+  { id: 12, name: 'Dec' },
 ];
 
 export const PayslipListScreen = ({ navigation }: any) => {
@@ -25,30 +41,69 @@ export const PayslipListScreen = ({ navigation }: any) => {
 
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
   useFocusEffect(
     useCallback(() => {
-      dispatch(fetchPayslips({ payroll_month: month, payroll_year: year }));
+      const params: any = { payroll_year: year };
+      if (month !== 0) params.payroll_month = month;
+      dispatch(fetchPayslips(params));
     }, [dispatch, month, year])
   );
 
-  const handlePrevMonth = () => {
-    if (month > 1) {
-      setMonth(m => m - 1);
-    } else {
-      setMonth(12);
-      setYear(y => y - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (month < 12) {
-      setMonth(m => m + 1);
-    } else {
-      setMonth(1);
-      setYear(y => y + 1);
-    }
-  };
+  const renderMonthFilter = () => (
+    <View style={styles.filterContainerRow}>
+      <View style={styles.stickyAllContainer}>
+        <TouchableOpacity
+          style={[
+            styles.filterPill,
+            month === 0 && { backgroundColor: colors.primary, borderColor: colors.primary }
+          ]}
+          onPress={() => setMonth(0)}
+        >
+          <Text style={[
+            styles.filterText,
+            month === 0 && { color: '#FFFFFF', fontWeight: '700' }
+          ]}>
+            All
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.divider} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScroll}
+        ref={scrollViewRef}
+        onContentSizeChange={() => {
+          if (month > 2) {
+            scrollViewRef.current?.scrollTo({ x: (month - 2) * 70, animated: true });
+          }
+        }}
+      >
+        {MONTHS.filter(m => m.id !== 0).map((mItem) => {
+          const isSelected = month === mItem.id;
+          return (
+            <TouchableOpacity
+              key={mItem.id}
+              style={[
+                styles.filterPill,
+                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+              ]}
+              onPress={() => setMonth(mItem.id)}
+            >
+              <Text style={[
+                styles.filterText,
+                isSelected && { color: '#FFFFFF', fontWeight: '700' }
+              ]}>
+                {mItem.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
 
   const handlePayslipPress = (item: any) => {
     navigation.navigate('PayslipDetailScreen', { id: item.id });
@@ -100,21 +155,9 @@ export const PayslipListScreen = ({ navigation }: any) => {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {renderMonthFilter()}
 
-        {/* Modern Month/Year Selector */}
-        <View style={styles.monthSelectorContainer}>
-          <TouchableOpacity onPress={handlePrevMonth} style={styles.monthArrowBtn}>
-            <Icon name="chevron-left" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.monthTextContainer}>
-            <Icon name="calendar-month-outline" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-            <Text style={styles.monthText}>{MONTH_NAMES[month - 1]} {year}</Text>
-          </View>
-          <TouchableOpacity onPress={handleNextMonth} style={styles.monthArrowBtn}>
-            <Icon name="chevron-right" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         <View style={styles.listContainer}>
           {payslipsLoading ? (
@@ -129,7 +172,7 @@ export const PayslipListScreen = ({ navigation }: any) => {
             <View style={styles.emptyStateContainer}>
               <Icon name="file-document-remove-outline" size={64} color={colors.textSecondary + '40'} />
               <Text style={styles.emptyStateTitle}>No Payslips Found</Text>
-              <Text style={styles.emptyStateSub}>There are no payslips available for {MONTH_NAMES[month - 1]} {year}.</Text>
+              <Text style={styles.emptyStateSub}>There are no payslips available for {month === 0 ? `the year ${year}` : `${MONTH_NAMES[month - 1]} ${year}`}.</Text>
             </View>
           )}
         </View>
@@ -164,8 +207,45 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  filterContainerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stickyAllContainer: {
+    paddingLeft: 16,
+    paddingRight: 8,
+  },
+  divider: {
+    width: 1,
+    height: 24,
+    backgroundColor: colors.border,
+    marginRight: 8,
+  },
+  filterScroll: {
+    paddingRight: 16,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
   scrollContent: {
-    paddingTop: 20,
+    paddingTop: 16,
   },
   monthSelectorContainer: {
     flexDirection: 'row',

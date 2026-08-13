@@ -1,23 +1,23 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, SafeAreaView, Switch, Modal, FlatList, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Switch, Modal, FlatList, Alert, ActivityIndicator } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { InputField } from '../components/InputField';
 import { PrimaryButton } from '../components/PrimaryButton';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { GlassDateTimePickerModal } from '../components/GlassDateTimePickerModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
-import { 
-  fetchExpenseProducts, 
-  fetchExpenseTaxes, 
-  fetchExpenseVendors, 
-  createExpenseRequest, 
-  uploadExpenseAttachment, 
+import {
+  fetchExpenseProducts,
+  fetchExpenseTaxes,
+  fetchExpenseVendors,
+  createExpenseRequest,
+  uploadExpenseAttachment,
   submitExpenseRequest,
   resetCreateSuccess
 } from '../redux/slice/expenseSlice';
@@ -46,13 +46,13 @@ export const AddExpenseScreen = ({ navigation }: any) => {
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [date, setDate] = useState(new Date());
   const [paidByEmployee, setPaidByEmployee] = useState(true);
-  
+
   // Modals and UI State
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'product' | 'tax' | 'vendor' | null>(null);
   const [attachment, setAttachment] = useState<{ uri: string, base64?: string, filename: string, type: string } | null>(null);
-  
+
   const [customAlert, setCustomAlert] = useState<{ visible: boolean, title: string, message: string, onConfirm?: () => void }>({
     visible: false, title: '', message: ''
   });
@@ -96,13 +96,15 @@ export const AddExpenseScreen = ({ navigation }: any) => {
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localExpenseId, setLocalExpenseId] = useState<number | string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!description || !selectedProduct || !unitPrice || !quantity) {
+    if (!description || !selectedProduct || !unitPrice) {
       setCustomAlert({
         visible: true,
         title: 'Validation Error',
-        message: 'Please fill in all required fields (Description, Category, Unit Price, Quantity)'
+        message: 'Please fill in all required fields (Description, Category, Unit Price)'
       });
       return;
     }
@@ -132,30 +134,51 @@ export const AddExpenseScreen = ({ navigation }: any) => {
       return;
     }
 
-    const expenseId = action.payload?.data?.id || action.payload?.id;
-    
-    if (expenseId) {
-      // 1. Upload Attachment if present
-      if (attachment && attachment.base64) {
-        const attachAction = await dispatch(uploadExpenseAttachment({
-          id: expenseId,
-          payload: {
-            attachment: attachment.base64,
-            filename: attachment.filename,
-            mimetype: attachment.type
-          }
-        }));
-        if (uploadExpenseAttachment.rejected.match(attachAction)) {
-          console.log('Attachment upload failed, but expense was created.');
-        }
-      }
+    const expenseId = action.payload?.data?.expense_id || action.payload?.data?.expense?.id || action.payload?.data?.id || action.payload?.id;
 
-      // We no longer automatically submit the request here.
-      // It will remain in 'Draft' state and can be submitted from the expense list.
+    if (expenseId) {
+      setLocalExpenseId(expenseId);
+    } else {
+      setCustomAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to retrieve created expense ID.'
+      });
+    }
+
+    setIsSubmitting(false);
+  };
+
+  const handleUploadAttachment = async () => {
+    if (!attachment || !attachment.base64 || !localExpenseId) return;
+    
+    setIsUploading(true);
+    const attachAction = await dispatch(uploadExpenseAttachment({
+      id: localExpenseId,
+      payload: {
+        attachment: attachment.base64,
+        filename: attachment.filename,
+        mimetype: attachment.type
+      }
+    }));
+    
+    if (uploadExpenseAttachment.rejected.match(attachAction)) {
+      setCustomAlert({
+        visible: true,
+        title: 'Upload Failed',
+        message: (attachAction.payload as string) || 'Failed to upload attachment.'
+      });
+      setIsUploading(false);
+      return;
     }
 
     dispatch(resetCreateSuccess());
-    setIsSubmitting(false);
+    setIsUploading(false);
+    navigation.goBack();
+  };
+
+  const handleSkipAttachment = () => {
+    dispatch(resetCreateSuccess());
     navigation.goBack();
   };
 
@@ -168,7 +191,7 @@ export const AddExpenseScreen = ({ navigation }: any) => {
     let data: any[] = [];
     let title = '';
     let isLoading = false;
-    
+
     if (modalType === 'product') {
       data = productsData?.records || [];
       title = 'Select Category';
@@ -193,15 +216,15 @@ export const AddExpenseScreen = ({ navigation }: any) => {
                 <Icon name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            
+
             {isLoading ? (
               <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
             ) : (
-              <FlatList 
+              <FlatList
                 data={data}
                 keyExtractor={(item: any) => item.id.toString()}
                 renderItem={({ item }) => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.modalItem}
                     onPress={() => {
                       if (modalType === 'product') {
@@ -219,7 +242,7 @@ export const AddExpenseScreen = ({ navigation }: any) => {
                     <Text style={styles.modalItemText}>{item.name || item.display_name}</Text>
                   </TouchableOpacity>
                 )}
-                ListEmptyComponent={() => <Text style={{textAlign: 'center', marginTop: 20}}>No items found.</Text>}
+                ListEmptyComponent={() => <Text style={{ textAlign: 'center', marginTop: 20 }}>No items found.</Text>}
               />
             )}
           </View>
@@ -234,7 +257,7 @@ export const AddExpenseScreen = ({ navigation }: any) => {
         <View style={[styles.modalContent, { width: '85%', borderRadius: 16, padding: 24, maxHeight: undefined }]}>
           <Text style={{ fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 12, textAlign: 'center' }}>{customAlert.title}</Text>
           <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 24, textAlign: 'center', lineHeight: 22 }}>{customAlert.message}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={{ backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
             onPress={() => {
               setCustomAlert(prev => ({ ...prev, visible: false }));
@@ -265,115 +288,129 @@ export const AddExpenseScreen = ({ navigation }: any) => {
         showsVerticalScrollIndicator={false}
         enableOnAndroid={true}
       >
-        <View style={styles.formCard}>
-          <InputField
-            label="Description *"
-            placeholder="e.g. Travel by car"
-            value={description}
-            onChangeText={setDescription}
-          />
-          
-          <View style={styles.row}>
-            <View style={{ flex: 1, marginRight: 8 }}>
+        {!localExpenseId ? (
+          <>
+            <View style={styles.formCard}>
               <InputField
-                label="Category *"
-                placeholder="Select Category"
-                value={selectedProduct?.name || ''}
-                onChangeText={() => {}}
+                label="Description *"
+                placeholder="e.g. Travel by car"
+                value={description}
+                onChangeText={setDescription}
+              />
+
+              <View style={styles.row}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <InputField
+                    label="Category *"
+                    placeholder="Select Category"
+                    value={selectedProduct?.name || ''}
+                    onChangeText={() => { }}
+                    rightIcon="chevron-down"
+                    onPress={() => openSelectionModal('product')}
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <InputField
+                    label="Expense Date"
+                    placeholder="YYYY-MM-DD"
+                    value={formatDate(date)}
+                    onChangeText={() => { }}
+                    rightIcon="calendar"
+                    onPress={() => setShowDatePicker(true)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <InputField
+                    label="Unit Price ($) *"
+                    placeholder="0.00"
+                    value={unitPrice}
+                    onChangeText={setUnitPrice}
+                    keyboardType="numeric"
+                    editable={false}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyLabel}>Total</Text>
+                <Text style={styles.readOnlyValue}>${total.toFixed(2)}</Text>
+              </View>
+
+              <InputField
+                label="Vendor (Optional)"
+                placeholder="Select Vendor"
+                value={selectedVendor?.name || ''}
+                onChangeText={() => { }}
                 rightIcon="chevron-down"
-                onPress={() => openSelectionModal('product')}
+                onPress={() => openSelectionModal('vendor')}
+              />
+
+              <View style={styles.switchRow}>
+                <View>
+                  <Text style={styles.switchLabel}>Paid By</Text>
+                  <Text style={styles.switchSubLabel}>{paidByEmployee ? 'Employee (to reimburse)' : 'Company'}</Text>
+                </View>
+                <Switch
+                  value={paidByEmployee}
+                  onValueChange={setPaidByEmployee}
+                  trackColor={{ false: '#e0e0e0', true: colors.primary + '80' }}
+                  thumbColor={paidByEmployee ? colors.primary : '#f4f3f4'}
+                />
+              </View>
+
+            </View>
+
+            <View style={styles.actionContainer}>
+              <PrimaryButton
+                label={isSubmitting ? "Creating..." : "Create Expense"}
+                onPress={handleSubmit}
+                disabled={isSubmitting}
               />
             </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <InputField
-                label="Expense Date"
-                placeholder="YYYY-MM-DD"
-                value={formatDate(date)}
-                onChangeText={() => {}}
-                rightIcon="calendar"
-                onPress={() => setShowDatePicker(true)}
+          </>
+        ) : (
+          <View style={styles.formCard}>
+            <View style={{ alignItems: 'center', marginBottom: 24 }}>
+              <Icon name="check-circle" size={48} color={colors.success} style={{ marginBottom: 12 }} />
+              <Text style={[styles.sectionHeading, { fontSize: 18, marginBottom: 4 }]}>Expense Created!</Text>
+              <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
+                Would you like to attach a receipt to this expense?
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.attachBtn} onPress={handlePickAttachment}>
+              <Icon name={attachment ? "image-check" : "paperclip"} size={24} color={colors.primary} />
+              <Text style={styles.attachBtnText}>{attachment ? attachment.filename : "Select Receipt"}</Text>
+            </TouchableOpacity>
+
+            <View style={{ marginTop: 24, gap: 12 }}>
+              <PrimaryButton
+                label={isUploading ? "Uploading..." : "Upload & Finish"}
+                onPress={handleUploadAttachment}
+                disabled={isUploading || !attachment}
               />
+              <TouchableOpacity onPress={handleSkipAttachment} style={{ padding: 12, alignItems: 'center' }}>
+                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 16 }}>Skip for now</Text>
+              </TouchableOpacity>
             </View>
           </View>
-
-          <View style={styles.row}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <InputField
-                label="Unit Price ($) *"
-                placeholder="0.00"
-                value={unitPrice}
-                onChangeText={setUnitPrice}
-                keyboardType="numeric"
-                editable={true}
-              />
-            </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <InputField
-                label="Quantity *"
-                placeholder="1"
-                value={quantity}
-                onChangeText={setQuantity}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          <View style={styles.readOnlyField}>
-            <Text style={styles.readOnlyLabel}>Total</Text>
-            <Text style={styles.readOnlyValue}>${total.toFixed(2)}</Text>
-          </View>
-
-          <InputField
-            label="Vendor (Optional)"
-            placeholder="Select Vendor"
-            value={selectedVendor?.name || ''}
-            onChangeText={() => {}}
-            rightIcon="chevron-down"
-            onPress={() => openSelectionModal('vendor')}
-          />
-
-
-
-          <View style={styles.switchRow}>
-            <View>
-              <Text style={styles.switchLabel}>Paid By</Text>
-              <Text style={styles.switchSubLabel}>{paidByEmployee ? 'Employee (to reimburse)' : 'Company'}</Text>
-            </View>
-            <Switch
-              value={paidByEmployee}
-              onValueChange={setPaidByEmployee}
-              trackColor={{ false: '#e0e0e0', true: colors.primary + '80' }}
-              thumbColor={paidByEmployee ? colors.primary : '#f4f3f4'}
-            />
-          </View>
-
-        </View>
-
-        <View style={styles.actionContainer}>
-          <TouchableOpacity style={styles.attachBtn} onPress={handlePickAttachment}>
-            <Icon name={attachment ? "check-circle" : "paperclip"} size={20} color={colors.primary} />
-            <Text style={styles.attachBtnText}>{attachment ? attachment.filename : "Attach Receipt"}</Text>
-          </TouchableOpacity>
-          <PrimaryButton 
-            label={isSaving ? "Submitting..." : "Submit Expense"}
-            onPress={handleSubmit}
-            disabled={isSaving}
-          />
-        </View>
-
+        )}
       </KeyboardAwareScrollView>
 
-      {showDatePicker && (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) setDate(selectedDate);
-          }}
-        />
-      )}
+      <GlassDateTimePickerModal
+        visible={showDatePicker}
+        mode="date"
+        title="Select Expense Date"
+        initialDate={date}
+        onSave={(selectedDate) => {
+          if (selectedDate) setDate(selectedDate);
+          setShowDatePicker(false);
+        }}
+        onClose={() => setShowDatePicker(false)}
+      />
 
       {renderSelectionModal()}
       {renderCustomAlert()}

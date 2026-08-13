@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, Alert, PermissionsAndroid, Platform } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -7,23 +7,24 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../redux/store';
-import { approveExpenseRequest, refuseExpenseRequest, fetchExpenseApprovals } from '../redux/slice/expenseSlice';
 import { CustomAlertModal } from '../components/CustomAlertModal';
+import RNFS from 'react-native-fs';
 
 export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
-  
+
   const { expense } = route.params;
   const [loadingAction, setLoadingAction] = useState<'approve' | 'refuse' | null>(null);
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' as any });
+  const [selectedAttachment, setSelectedAttachment] = useState<any>(null);
 
   const categoryName = expense.category?.name || (Array.isArray(expense.product_id) ? expense.product_id[1] : expense.product_id?.name) || 'Expense';
   const displayCategoryName = categoryName.replace(/^\[.*?\]\s*/, '').trim();
   const descriptionName = (expense.name || expense.description || 'Expense').replace(/^\[.*?\]\s*/, '').trim();
-  const employeeName = Array.isArray(expense.employee_id) ? expense.employee_id[1] : expense.employee_id?.name || 'Employee';
+  const employeeName = Array.isArray(expense.employee) ? expense.employee[1] : expense.employee?.name || 'Employee';
   const amount = expense.total_amount || 0;
   const date = expense.date || expense.create_date?.split(' ')[0] || '';
   const statusLabel = expense.state_label || expense.status || 'Pending';
@@ -73,6 +74,42 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
     setLoadingAction(null);
   };
 
+  const requestStoragePermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        if (Number(Platform.Version) >= 33) return true;
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleDownloadAttachment = async (att: any) => {
+    if (!att || !att.base64) {
+       Alert.alert("Error", "No file data available to download.");
+       return;
+    }
+    const hasPermission = await requestStoragePermission();
+    if (!hasPermission) {
+       Alert.alert("Permission Denied", "Cannot download file without storage permission.");
+       return;
+    }
+
+    try {
+       const path = `${RNFS.DownloadDirectoryPath}/${att.name}`;
+       await RNFS.writeFile(path, att.base64, 'base64');
+       Alert.alert("Success", `File downloaded to Downloads folder:\n${att.name}`);
+    } catch (error) {
+       Alert.alert("Download Failed", "There was an error saving the file.");
+       console.log("Download error:", error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
@@ -100,7 +137,7 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
         {/* Details Card */}
         <View style={styles.detailCard}>
           <Text style={styles.sectionTitle}>General Information</Text>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Employee</Text>
             <View style={styles.employeeRow}>
@@ -110,14 +147,14 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
               <Text style={styles.detailValue}>{employeeName}</Text>
             </View>
           </View>
-          
+
           <View style={styles.divider} />
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Date</Text>
             <Text style={styles.detailValue}>{date}</Text>
           </View>
-          
+
           <View style={styles.divider} />
 
           <View style={styles.detailRow}>
@@ -151,13 +188,43 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
               </View>
             </>
           )}
+
+          {expense.attachments && expense.attachments.length > 0 && (
+            <>
+              <View style={styles.divider} />
+              <View style={{ paddingTop: 16 }}>
+                <Text style={styles.detailLabel}>Attachments</Text>
+                <View style={styles.attachmentContainer}>
+                  {expense.attachments.map((att: any, idx: number) => {
+                    const isImage = att.mimetype?.startsWith('image/');
+                    return (
+                      <TouchableOpacity key={idx} style={styles.attachmentCard} onPress={() => setSelectedAttachment(att)}>
+                        {isImage && att.base64 ? (
+                          <Image 
+                            source={{ uri: `data:${att.mimetype};base64,${att.base64}` }} 
+                            style={styles.attachmentImage} 
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.attachmentFile}>
+                            <Icon name="file-document-outline" size={32} color={colors.textSecondary} />
+                          </View>
+                        )}
+                        <Text style={styles.attachmentName} numberOfLines={1}>{att.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
       {/* Floating Action Bar */}
       <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity 
-          style={[styles.actionBtn, styles.refuseBtn]} 
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.refuseBtn]}
           onPress={handleRefuse}
           disabled={loadingAction !== null}
         >
@@ -170,9 +237,9 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
             </>
           )}
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionBtn, styles.approveBtn]} 
+
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.approveBtn]}
           onPress={handleApprove}
           disabled={loadingAction !== null}
         >
@@ -186,7 +253,7 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
           )}
         </TouchableOpacity>
       </View>
-      
+
       <CustomAlertModal
         visible={alertConfig.visible}
         title={alertConfig.title}
@@ -194,6 +261,37 @@ export const ManagerExpenseDetailScreen = ({ route, navigation }: any) => {
         type={alertConfig.type}
         onPrimaryPress={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
       />
+
+      {/* Attachment Viewer Modal */}
+      <Modal visible={!!selectedAttachment} transparent animationType="fade" onRequestClose={() => setSelectedAttachment(null)}>
+        <View style={styles.viewerOverlay}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setSelectedAttachment(null)} style={styles.viewerBtn}>
+              <Icon name="close" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              {selectedAttachment?.name}
+            </Text>
+            <TouchableOpacity onPress={() => handleDownloadAttachment(selectedAttachment)} style={styles.viewerBtn}>
+              <Icon name="download" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.viewerContent}>
+            {selectedAttachment?.mimetype?.startsWith('image/') && selectedAttachment?.base64 ? (
+              <Image 
+                source={{ uri: `data:${selectedAttachment.mimetype};base64,${selectedAttachment.base64}` }} 
+                style={{ width: '100%', height: '100%' }} 
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={{ alignItems: 'center' }}>
+                <Icon name="file-document" size={80} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 16 }}>Preview not available</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -370,4 +468,68 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  attachmentContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 12,
+  },
+  attachmentCard: {
+    width: 100,
+    alignItems: 'center',
+  },
+  attachmentImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  attachmentFile: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  attachmentName: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+  },
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  viewerBtn: {
+    padding: 8,
+  },
+  viewerTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
+  },
+  viewerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  }
 });

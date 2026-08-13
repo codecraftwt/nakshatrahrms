@@ -17,7 +17,7 @@ export const ManagerExpenseListScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
-  
+
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' as any });
 
   const { approvalsData, approvalsLoading } = useSelector((state: RootState) => state.expense);
@@ -32,7 +32,7 @@ export const ManagerExpenseListScreen = ({ navigation }: any) => {
     const categoryName = item.category?.name || (Array.isArray(item.product_id) ? item.product_id[1] : item.product_id?.name) || 'Expense';
     const displayCategoryName = categoryName.replace(/^\[.*?\]\s*/, '').trim();
     const descriptionName = (item.name || item.description || 'Expense').replace(/^\[.*?\]\s*/, '').trim();
-    const employeeName = Array.isArray(item.employee_id) ? item.employee_id[1] : item.employee_id?.name || 'Employee';
+    const employeeName = Array.isArray(item.employee) ? item.employee[1] : item.employee?.name || 'Employee';
     const amount = item.total_amount || 0;
     const date = item.date || item.create_date?.split(' ')[0] || '';
 
@@ -47,8 +47,8 @@ export const ManagerExpenseListScreen = ({ navigation }: any) => {
     };
 
     return (
-      <TouchableOpacity 
-        key={item.id} 
+      <TouchableOpacity
+        key={item.id}
         style={styles.listCard}
         activeOpacity={0.8}
         onPress={() => navigation.navigate('ManagerExpenseDetailScreen', { expense: item })}
@@ -105,7 +105,7 @@ export const ManagerExpenseListScreen = ({ navigation }: any) => {
         </View>
         <View style={{ height: 20 + insets.bottom }} />
       </ScrollView>
-      
+
       <CustomAlertModal
         visible={alertConfig.visible}
         title={alertConfig.title}

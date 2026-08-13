@@ -1,15 +1,23 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { StatusBadge } from '../components/StatusBadge';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { fetchExpenseRequests, submitExpenseRequest } from '../redux/slice/expenseSlice';
 import { useFocusEffect } from '@react-navigation/native';
+
+const STATUSES = [
+  { id: 'all', name: 'All' },
+  { id: 'draft', name: 'Draft' },
+  { id: 'reported', name: 'Submitted' },
+  { id: 'approved', name: 'Approved' },
+  { id: 'refused', name: 'Refused' },
+];
 
 export const ExpenseListScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
@@ -21,12 +29,63 @@ export const ExpenseListScreen = ({ navigation }: any) => {
 
   const [submitModalVisible, setSubmitModalVisible] = useState(false);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | number | null>(null);
+  
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
-  // You can fetch specific status or all. For now, fetch all on focus.
   useFocusEffect(
     useCallback(() => {
-      dispatch(fetchExpenseRequests({ status: 'all', limit: 50 }));
-    }, [dispatch])
+      dispatch(fetchExpenseRequests({ status: selectedStatus, limit: 50 }));
+    }, [dispatch, selectedStatus])
+  );
+
+  const renderStatusFilter = () => (
+    <View style={styles.filterContainerRow}>
+      <View style={styles.stickyAllContainer}>
+        <TouchableOpacity
+          style={[
+            styles.filterPill,
+            selectedStatus === 'all' && { backgroundColor: colors.primary, borderColor: colors.primary }
+          ]}
+          onPress={() => setSelectedStatus('all')}
+        >
+          <Text style={[
+            styles.filterText,
+            selectedStatus === 'all' && { color: '#FFFFFF', fontWeight: '700' }
+          ]}>
+            All
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.divider} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScroll}
+        ref={scrollViewRef}
+      >
+        {STATUSES.filter(s => s.id !== 'all').map((status) => {
+          const isSelected = selectedStatus === status.id;
+          return (
+            <TouchableOpacity
+              key={status.id}
+              style={[
+                styles.filterPill,
+                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+              ]}
+              onPress={() => setSelectedStatus(status.id)}
+            >
+              <Text style={[
+                styles.filterText,
+                isSelected && { color: '#FFFFFF', fontWeight: '700' }
+              ]}>
+                {status.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 
   const handleExpensePress = (item: any) => {
@@ -43,7 +102,7 @@ export const ExpenseListScreen = ({ navigation }: any) => {
     const action = await dispatch(submitExpenseRequest(selectedExpenseId));
     if (submitExpenseRequest.fulfilled.match(action)) {
       // Refresh the list after successful submission
-      dispatch(fetchExpenseRequests({ status: 'all', limit: 50 }));
+      dispatch(fetchExpenseRequests({ status: selectedStatus, limit: 50 }));
     } else {
       Alert.alert("Error", "Failed to submit expense request.");
     }
@@ -138,12 +197,9 @@ export const ExpenseListScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
+      {renderStatusFilter()}
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Expenses</Text>
-        </View>
 
         <View style={styles.listContainer}>
           {requestsLoading ? (
@@ -186,6 +242,43 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  filterContainerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stickyAllContainer: {
+    paddingLeft: 16,
+    paddingRight: 8,
+  },
+  divider: {
+    width: 1,
+    height: 24,
+    backgroundColor: colors.border,
+    marginRight: 8,
+  },
+  filterScroll: {
+    paddingRight: 16,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   addButton: {
     width: 40,
