@@ -200,7 +200,7 @@ export const approveExpenseRequest = createAsyncThunk(
   'expense/approveExpenseRequest',
   async (id: string | number, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/expense/requests/${id}/approve`);
+      const response = await api.post(`/expense/approvals/${id}/approve`);
       return response.data;
     } catch (error: any) {
       console.log('Approve Expense Error:', error?.response?.data || error.message);
@@ -213,7 +213,7 @@ export const refuseExpenseRequest = createAsyncThunk(
   'expense/refuseExpenseRequest',
   async (id: string | number, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/expense/requests/${id}/refuse`);
+      const response = await api.post(`/expense/approvals/${id}/refuse`);
       return response.data;
     } catch (error: any) {
       console.log('Refuse Expense Error:', error?.response?.data || error.message);

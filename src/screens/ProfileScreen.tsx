@@ -20,7 +20,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const { colors, theme, toggleTheme } = useTheme();
   const styles = createStyles(colors);
   const isFocused = useIsFocused();
-  
+
   const dispatch = useDispatch<AppDispatch>();
   const { data: profileData, loading } = useSelector((state: RootState) => state.profile);
   const { data: shiftData, assignedData } = useSelector((state: RootState) => state.shift);
@@ -53,13 +53,13 @@ export const ProfileScreen = ({ navigation }: any) => {
   };
 
   const isDarkMode = theme === 'dark';
-  
+
   const [profileImage, setProfileImage] = React.useState<string | null>(null);
   const [isImagePickerVisible, setIsImagePickerVisible] = React.useState(false);
 
   const handleCamera = async () => {
     setIsImagePickerVisible(false);
-    
+
     if (Platform.OS === 'android') {
       try {
         const granted = await PermissionsAndroid.request(
@@ -88,7 +88,7 @@ export const ProfileScreen = ({ navigation }: any) => {
       cameraType: 'front',
       quality: 0.8,
     };
-    
+
     try {
       const result = await launchCamera(options);
       if (result.didCancel) {
@@ -110,7 +110,7 @@ export const ProfileScreen = ({ navigation }: any) => {
       mediaType: 'photo',
       quality: 0.8,
     };
-    
+
     try {
       const result = await launchImageLibrary(options);
       if (result.didCancel) {
@@ -157,7 +157,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                     uri = `data:image/jpeg;base64,${profileData.photo}`;
                   }
                 }
-                
+
                 if (uri) {
                   return <Image source={{ uri }} style={styles.avatarImage} />;
                 }
@@ -166,10 +166,10 @@ export const ProfileScreen = ({ navigation }: any) => {
             </View>
             {/* Edit camera button removed */}
           </View>
-          
+
           <Text style={styles.name}>{profileData?.name || 'User'}</Text>
           <Text style={styles.designation}>{profileData?.designation || 'Employee'}</Text>
-          
+
           <View style={styles.idBadge}>
             <Icon name="identifier" size={14} color={colors.primary} style={{ marginRight: 4 }} />
             <Text style={styles.empId}>{profileData?.employee_code || ''}</Text>
@@ -188,14 +188,14 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Text style={styles.shiftLabel}>Current Shift</Text>
               <Text style={styles.shiftValue}>
                 {shiftData?.name || profileData?.shift?.name?.split(' ')[0] || 'GEN'} · {
-                  shiftData?.sessions?.length > 0 
+                  shiftData?.sessions?.length > 0
                     ? `${formatTime(shiftData.sessions[0].in_time)} - ${formatTime(shiftData.sessions[shiftData.sessions.length - 1].out_time)}`
                     : '09:30 - 18:00'
                 }
               </Text>
             </View>
           </View>
-          
+
           <View style={styles.divider} />
 
           {/* Assigned Shift */}
@@ -207,7 +207,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Text style={styles.shiftLabel}>Assigned Shift</Text>
               <Text style={styles.shiftValue}>
                 {assignedData?.name || profileData?.shift?.name?.split(' ')[0] || 'GEN'} · {
-                  assignedData?.sessions?.length > 0 
+                  assignedData?.sessions?.length > 0
                     ? `${formatTime(assignedData.sessions[0].in_time)} - ${formatTime(assignedData.sessions[assignedData.sessions.length - 1].out_time)}`
                     : '09:30 - 18:00'
                 }
@@ -216,7 +216,7 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
 
           <View style={styles.divider} />
-          
+
           <View style={styles.settingsRow}>
             <View style={styles.rowIconBox}>
               <Icon name="domain" size={20} color={colors.textSecondary} />
@@ -224,9 +224,9 @@ export const ProfileScreen = ({ navigation }: any) => {
             <Text style={styles.rowLabel}>Department</Text>
             <Text style={styles.rowValue}>{profileData?.department?.name || 'N/A'}</Text>
           </View>
-          
+
           <View style={styles.divider} />
-          
+
           <View style={styles.settingsRow}>
             <View style={styles.rowIconBox}>
               <Icon name="map-marker-outline" size={20} color={colors.textSecondary} />
@@ -239,7 +239,7 @@ export const ProfileScreen = ({ navigation }: any) => {
 
 
         {/* Logout Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.logoutBtn}
           activeOpacity={0.8}
           onPress={handleLogout}
@@ -247,7 +247,7 @@ export const ProfileScreen = ({ navigation }: any) => {
           <Icon name="logout" size={20} color={colors.danger} style={{ marginRight: 8 }} />
           <Text style={styles.logoutLabel}>Sign Out</Text>
         </TouchableOpacity>
-        
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -258,13 +258,13 @@ export const ProfileScreen = ({ navigation }: any) => {
         animationType="fade"
         onRequestClose={() => setIsImagePickerVisible(false)}
       >
-        <Pressable 
-          style={styles.modalOverlay} 
+        <Pressable
+          style={styles.modalOverlay}
           onPress={() => setIsImagePickerVisible(false)}
         >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Update Profile Picture</Text>
-            
+
             <View style={styles.modalOptions}>
               <TouchableOpacity style={styles.modalOptionBtn} onPress={handleCamera}>
                 <View style={[styles.modalIconBox, { backgroundColor: colors.primaryBg }]}>
@@ -272,7 +272,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                 </View>
                 <Text style={styles.modalOptionText}>Camera</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity style={styles.modalOptionBtn} onPress={handleGallery}>
                 <View style={[styles.modalIconBox, { backgroundColor: colors.successBg }]}>
                   <Icon name="image-multiple" size={28} color={colors.success} />
@@ -280,9 +280,9 @@ export const ProfileScreen = ({ navigation }: any) => {
                 <Text style={styles.modalOptionText}>Gallery</Text>
               </TouchableOpacity>
             </View>
-            
-            <TouchableOpacity 
-              style={styles.modalCancelBtn} 
+
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
               onPress={() => setIsImagePickerVisible(false)}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>

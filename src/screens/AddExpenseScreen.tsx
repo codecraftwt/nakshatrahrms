@@ -322,14 +322,22 @@ export const AddExpenseScreen = ({ navigation }: any) => {
               </View>
 
               <View style={styles.row}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, marginRight: 8 }}>
                   <InputField
                     label="Unit Price ($) *"
                     placeholder="0.00"
                     value={unitPrice}
                     onChangeText={setUnitPrice}
                     keyboardType="numeric"
-                    editable={false}
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <InputField
+                    label="Quantity *"
+                    placeholder="1"
+                    value={quantity}
+                    onChangeText={setQuantity}
+                    keyboardType="numeric"
                   />
                 </View>
               </View>
