@@ -38,35 +38,18 @@ export const ServerUrlScreen = ({ navigation }: any) => {
     setError('');
 
     try {
-      // Format the POST body exactly as requested
-      const payload = {
-        jsonrpc: '2.0',
-        method: 'call',
-        params: {},
-        id: 1
-      };
-
-      const testEndpoint = `${finalUrl}/web/database/list`;
-
-      const response = await axios.post(testEndpoint, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: 10000 // 10s timeout
+      // Test if the server is reachable with a simple GET request
+      await axios.get(finalUrl, {
+        timeout: 10000,
+        // Accept any response status (e.g. 404, 401) as proof the server is reachable
+        validateStatus: () => true,
       });
 
-      if (response.data && response.data.result && Array.isArray(response.data.result)) {
-        // We received a valid response with database list
-        // Even if we don't need the DB for this frontend, it confirms the Odoo server is valid
-        // We append trailing slash as axiosInstance base URL usually needs one or works fine with it
-        await setBaseUrl(finalUrl + '/');
+      // Server is reachable, save URL
+      await setBaseUrl(finalUrl + '/');
 
-        // Go to login screen
-        navigation.replace('LoginScreen');
-      } else {
-        setError('Invalid response from server. Please check the URL.');
-      }
+      // Go to login screen
+      navigation.replace('LoginScreen');
     } catch (err: any) {
       console.log('Server validation error:', err.message);
       setError('Could not connect to the server. Please verify the URL is correct and the server is reachable.');
