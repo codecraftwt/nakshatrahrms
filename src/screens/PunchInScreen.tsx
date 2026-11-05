@@ -26,8 +26,21 @@ export const PunchInScreen = ({ navigation }: any) => {
   const styles = createStyles(colors);
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { geoFencingData } = useSelector((state: RootState) => state.attendance);
+  const { geoFencingData, statusData } = useSelector((state: RootState) => state.attendance);
+  const { data: dashboardData } = useSelector((state: RootState) => state.dashboard);
   const isLiveTrackingDisabled = user?.track_live_location === false;
+
+  const allowMobileAttendance =
+    dashboardData?.allow_mobile_attendance ??
+    dashboardData?.employee?.allow_mobile_attendance ??
+    statusData?.allow_mobile_attendance ??
+    user?.employee?.allow_mobile_attendance ??
+    true;
+
+  const canPunchIn =
+    dashboardData?.can_punch_in ??
+    statusData?.can_punch_in ??
+    true;
   
   const isTargetDevice = Platform.OS === 'android' && ['vivo', 'oppo', 'oneplus'].includes(String(Platform.constants.Brand || Platform.constants.Manufacturer || '').toLowerCase());
 
@@ -128,6 +141,22 @@ export const PunchInScreen = ({ navigation }: any) => {
   }, [currentLocation, geoFencingData]);
 
   const takeSelfie = async () => {
+    if (!allowMobileAttendance) {
+      showAlert(
+        'Mobile Attendance Restricted',
+        'You are not allowed to punch in from the Mobile App because your attendance rule is Biometric, Manual.'
+      );
+      return;
+    }
+
+    if (!canPunchIn) {
+      showAlert(
+        'Cannot Punch In',
+        'Punch in is currently not allowed for your attendance status.'
+      );
+      return;
+    }
+
     if (Platform.OS === 'android') {
       try {
         const granted = await PermissionsAndroid.request(
@@ -178,6 +207,22 @@ export const PunchInScreen = ({ navigation }: any) => {
 
   const handleConfirmPunchIn = async (skipDeviceCheck = false) => {
     if (loading) return;
+
+    if (!allowMobileAttendance) {
+      showAlert(
+        'Mobile Attendance Restricted',
+        'You are not allowed to punch in from the Mobile App because your attendance rule is Biometric, Manual.'
+      );
+      return;
+    }
+
+    if (!canPunchIn) {
+      showAlert(
+        'Cannot Punch In',
+        'Punch in is currently not allowed for your attendance status.'
+      );
+      return;
+    }
 
     if (!skipDeviceCheck) {
       try {
@@ -275,8 +320,11 @@ export const PunchInScreen = ({ navigation }: any) => {
 
       try {
         await dispatch(postPunchIn(payload)).unwrap();
-      } catch (punchErr) {
-        throw punchErr;
+      } catch (punchErr: any) {
+        setLoading(false);
+        const errMsg = typeof punchErr === 'string' ? punchErr : (punchErr?.message || 'Failed to punch in');
+        showAlert('Punch In Failed', errMsg);
+        return;
       }
 
       // ── Step 5: Start background tracking AFTER punch in succeeds ────────────
@@ -301,7 +349,8 @@ export const PunchInScreen = ({ navigation }: any) => {
       if (err?.code !== undefined) {
         showAlert('Location Error', 'Failed to get current location. Please try again.');
       } else {
-        showAlert('Error', 'Failed to punch in. Please try again.');
+        const errMsg = typeof err === 'string' ? err : (err?.message || 'Failed to punch in. Please try again.');
+        showAlert('Error', errMsg);
       }
     }
   };
@@ -328,6 +377,15 @@ export const PunchInScreen = ({ navigation }: any) => {
           </View>
         )}
       </View>
+
+      {!allowMobileAttendance && (
+        <View style={[styles.bannerContainer, { backgroundColor: colors.dangerBg, borderColor: colors.danger }]}>
+          <Icon name="lock-alert-outline" size={20} color={colors.danger} style={styles.bannerIcon} />
+          <Text style={[styles.bannerText, { color: colors.danger }]}>
+            You are not allowed to punch in from the Mobile App because your attendance rule is Biometric, Manual.
+          </Text>
+        </View>
+      )}
 
       {isLiveTrackingDisabled && (
         <View style={styles.bannerContainer}>

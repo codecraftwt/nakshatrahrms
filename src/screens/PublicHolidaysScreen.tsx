@@ -37,12 +37,20 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
     const firstDay = new Date(year, monthIndex, 1).getDay();
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     
-    const grid = [];
+    const grid: (number | null)[] = [];
     for (let i = 0; i < firstDay; i++) {
       grid.push(null);
     }
     for (let i = 1; i <= daysInMonth; i++) {
       grid.push(i);
+    }
+    while (grid.length % 7 !== 0) {
+      grid.push(null);
+    }
+
+    const weeks: (number | null)[][] = [];
+    for (let i = 0; i < grid.length; i += 7) {
+      weeks.push(grid.slice(i, i + 7));
     }
     
     return (
@@ -57,21 +65,27 @@ export const PublicHolidaysScreen = ({ navigation }: any) => {
         <View style={styles.calendarBody}>
           <View style={styles.daysOfWeekRow}>
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <Text key={`dow-${i}`} style={styles.dayOfWeekText}>{d}</Text>
+              <View key={`dow-${i}`} style={styles.dayOfWeekCell}>
+                <Text style={styles.dayOfWeekText}>{d}</Text>
+              </View>
             ))}
           </View>
           
           <View style={styles.daysGrid}>
-            {grid.map((dayNum, i) => {
-               const isHoliday = dayNum ? !!days[dayNum] : false;
-               return (
-                 <View key={`day-${i}`} style={styles.dayCellContainer}>
-                   <View style={[styles.dayCell, isHoliday && styles.holidayCell]}>
-                     <Text style={[styles.dayText, isHoliday && styles.holidayText]}>{dayNum || ''}</Text>
-                   </View>
-                 </View>
-               )
-            })}
+            {weeks.map((week, weekIndex) => (
+              <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                {week.map((dayNum, dayIndex) => {
+                  const isHoliday = dayNum ? !!days[dayNum] : false;
+                  return (
+                    <View key={`day-${dayIndex}`} style={styles.dayCellContainer}>
+                      <View style={[styles.dayCell, isHoliday && styles.holidayCell]}>
+                        <Text style={[styles.dayText, isHoliday && styles.holidayText]}>{dayNum || ''}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
           </View>
 
           {holidaysList.length > 0 && (
@@ -250,24 +264,31 @@ const createStyles = (colors: ThemeColors, isSmallDevice: boolean) => StyleSheet
   },
   daysOfWeekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     backgroundColor: colors.primary, 
     paddingVertical: 2,
+    width: '100%',
+  },
+  dayOfWeekCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dayOfWeekText: {
     color: '#FFFFFF',
     fontSize: 8,
     fontWeight: '700',
-    width: `${100/7}%`,
     textAlign: 'center',
   },
   daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     padding: 2,
+    width: '100%',
+  },
+  weekRow: {
+    flexDirection: 'row',
+    width: '100%',
   },
   dayCellContainer: {
-    width: `${100/7}%`,
+    flex: 1,
     height: isSmallDevice ? 18 : 22, // Fixed height makes it compact and rectangular like the image
     justifyContent: 'center',
     alignItems: 'center',

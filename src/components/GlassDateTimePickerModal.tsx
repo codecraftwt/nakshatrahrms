@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Modal, Animated, Easing, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { AppText as Text } from './AppText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -10,10 +10,8 @@ interface GlassDateTimePickerModalProps {
   onSave: (date: Date) => void;
   initialDate: Date;
   title?: string;
-  mode?: 'date' | 'datetime';
+  mode?: 'date' | 'datetime' | 'time';
 }
-
-const { width } = Dimensions.get('window');
 
 const MONTH_NAMES = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -138,7 +136,10 @@ export const GlassDateTimePickerModal = ({
 
   const changeMonth = (delta: number) => {
     const newDate = new Date(selectedDate);
+    newDate.setDate(1);
     newDate.setMonth(currentMonth + delta);
+    const daysInTargetMonth = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+    newDate.setDate(Math.min(currentDateNum, daysInTargetMonth));
     setSelectedDate(newDate);
   };
 
@@ -152,9 +153,17 @@ export const GlassDateTimePickerModal = ({
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     
-    const grid = [];
+    const grid: (number | null)[] = [];
     for (let i = 0; i < firstDay; i++) grid.push(null);
     for (let i = 1; i <= daysInMonth; i++) grid.push(i);
+    while (grid.length % 7 !== 0) {
+      grid.push(null);
+    }
+
+    const weeks: (number | null)[][] = [];
+    for (let i = 0; i < grid.length; i += 7) {
+      weeks.push(grid.slice(i, i + 7));
+    }
 
     return (
       <View style={styles.calendarContainer}>
@@ -170,26 +179,32 @@ export const GlassDateTimePickerModal = ({
         
         <View style={styles.daysOfWeekRow}>
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-            <Text key={i} style={styles.dayOfWeekText}>{d}</Text>
+            <View key={i} style={styles.dayOfWeekCell}>
+              <Text style={styles.dayOfWeekText}>{d}</Text>
+            </View>
           ))}
         </View>
 
         <View style={styles.daysGrid}>
-          {grid.map((dayNum, i) => {
-            const isActive = dayNum === currentDateNum;
-            return (
-              <View key={i} style={styles.dayCellContainer}>
-                {dayNum ? (
-                  <TouchableOpacity 
-                    style={[styles.dayCell, isActive && styles.dayCellActive]}
-                    onPress={() => selectDate(dayNum)}
-                  >
-                    <Text style={[styles.dayText, isActive && styles.dayTextActive]}>{dayNum}</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            );
-          })}
+          {weeks.map((week, weekIdx) => (
+            <View key={weekIdx} style={styles.weekRow}>
+              {week.map((dayNum, dayIdx) => {
+                const isActive = dayNum === currentDateNum;
+                return (
+                  <View key={dayIdx} style={styles.dayCellContainer}>
+                    {dayNum ? (
+                      <TouchableOpacity 
+                        style={[styles.dayCell, isActive && styles.dayCellActive]}
+                        onPress={() => selectDate(dayNum)}
+                      >
+                        <Text style={[styles.dayText, isActive && styles.dayTextActive]}>{dayNum}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </View>
       </View>
     );
@@ -197,7 +212,7 @@ export const GlassDateTimePickerModal = ({
 
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         {/* Glassmorphism Card */}
         <View style={styles.glassCard}>
@@ -205,7 +220,7 @@ export const GlassDateTimePickerModal = ({
           
           {/* Main Time Display */}
           {mode !== 'date' && (
-            <View style={styles.timeDisplayContainer}>
+            <View style={[styles.timeDisplayContainer, mode === 'time' && { marginBottom: 20, marginTop: 8 }]}>
               <TouchableOpacity onPress={() => { setActiveTab('TIME'); setTimeMode('HOURS'); }}>
                 <Text style={[styles.largeTimeText, activeTab === 'TIME' && timeMode === 'HOURS' && styles.glowText]}>
                   {String(displayHour).padStart(2, '0')}
@@ -229,18 +244,20 @@ export const GlassDateTimePickerModal = ({
           )}
 
           {/* Date Sub-display */}
-          <TouchableOpacity onPress={() => mode !== 'date' && setActiveTab('DATE')} disabled={mode === 'date'}>
-            <Text style={[
-              styles.dateSubText, 
-              mode === 'date' && { fontSize: 24, fontWeight: '700', color: '#E0E6ED', marginBottom: 24, marginTop: 12 },
-              activeTab === 'DATE' && mode !== 'date' && styles.glowText
-            ]}>
-              {MONTH_NAMES[currentMonth].substring(0, 3)} {currentDateNum}, {currentYear}
-            </Text>
-          </TouchableOpacity>
+          {mode !== 'time' && (
+            <TouchableOpacity onPress={() => mode !== 'date' && setActiveTab('DATE')} disabled={mode === 'date'}>
+              <Text style={[
+                styles.dateSubText, 
+                mode === 'date' && { fontSize: 24, fontWeight: '700', color: '#E0E6ED', marginBottom: 24, marginTop: 12 },
+                activeTab === 'DATE' && mode !== 'date' && styles.glowText
+              ]}>
+                {MONTH_NAMES[currentMonth].substring(0, 3)} {currentDateNum}, {currentYear}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Tabs */}
-          {mode !== 'date' && (
+          {mode === 'datetime' && (
             <View style={styles.tabsContainer}>
               <TouchableOpacity 
                 style={[styles.tabBtn, activeTab === 'TIME' && styles.tabBtnActive]}
@@ -289,7 +306,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   glassCard: {
-    width: width * 0.9,
+    width: '90%',
+    maxWidth: 400,
     backgroundColor: 'rgba(30, 35, 45, 0.96)',
     borderRadius: 24,
     borderWidth: 1,
@@ -382,7 +400,7 @@ const styles = StyleSheet.create({
   },
   contentBody: {
     width: '100%',
-    height: 240, // Fixed height so UI doesn't jump
+    minHeight: 240,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -450,22 +468,29 @@ const styles = StyleSheet.create({
   },
   daysOfWeekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 8,
+    width: '100%',
+  },
+  dayOfWeekCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dayOfWeekText: {
-    width: `${100/7}%`,
     textAlign: 'center',
     color: '#A0AAB5',
     fontSize: 12,
     fontWeight: '700',
   },
   daysGrid: {
+    width: '100%',
+  },
+  weekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    width: '100%',
   },
   dayCellContainer: {
-    width: `${100/7}%`,
+    flex: 1,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',

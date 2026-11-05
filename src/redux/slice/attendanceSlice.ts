@@ -102,10 +102,13 @@ export const postPunchIn = createAsyncThunk(
   async (data: { lat: number; lng: number; selfie: string; timestamp: string; in_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-in', data);
+      if (response.data?.status === false || response.data?.success === false) {
+        return rejectWithValue(response.data?.message || 'You are not allowed to punch in from the Mobile App.');
+      }
       return response.data;
     } catch (error: any) {
       console.log('Punch In Error:', error?.response?.data || error.message);
-      return rejectWithValue(error.response?.data?.message || 'Failed to punch in');
+      return rejectWithValue(error.response?.data?.message || error.message || 'Failed to punch in');
     }
   }
 );
@@ -115,10 +118,13 @@ export const postPunchOut = createAsyncThunk(
   async (data: { attendance_id: number; lat: number; lng: number; selfie: string; timestamp: string; out_remarks?: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/attendance/punch-out', data);
+      if (response.data?.status === false || response.data?.success === false) {
+        return rejectWithValue(response.data?.message || 'You are not allowed to punch out from the Mobile App.');
+      }
       return response.data;
     } catch (error: any) {
       console.log('Punch Out Error:', error?.response?.data || error.message);
-      return rejectWithValue(error.response?.data?.message || 'Failed to punch out');
+      return rejectWithValue(error.response?.data?.message || error.message || 'Failed to punch out');
     }
   }
 );

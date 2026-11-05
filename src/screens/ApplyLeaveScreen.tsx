@@ -21,11 +21,32 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
   const [type, setType] = useState<any>(null);
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
+  const [gatePassDate, setGatePassDate] = useState(new Date());
+
+  const [startTimeDate, setStartTimeDate] = useState(() => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    return d;
+  });
+  const [endTimeDate, setEndTimeDate] = useState(() => {
+    const d = new Date();
+    d.setHours(19, 0, 0, 0);
+    return d;
+  });
+
   const [reason, setReason] = useState('');
   const [isHalfDay, setIsHalfDay] = useState(false);
 
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
+  const [pickerConfig, setPickerConfig] = useState<{
+    mode: 'date' | 'time';
+    title: string;
+    target: 'start_date' | 'end_date' | 'gate_date' | 'start_time' | 'end_time';
+  }>({
+    mode: 'date',
+    title: 'Select Start Date',
+    target: 'start_date',
+  });
 
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -73,48 +94,122 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
   }, [applySuccess, applyError]);
 
   const selectedBalance = balanceData?.balances?.find((b: any) => b.id === type?.id);
+  const isGatePass = Boolean(
+    type?.name?.toLowerCase().includes('gate') ||
+    selectedBalance?.request_unit === 'hour' ||
+    type?.request_unit === 'hour'
+  );
 
   const insets = useSafeAreaInsets();
   const { colors, theme } = useTheme();
   const styles = createStyles(colors);
   const isFocused = useIsFocused();
 
-  const handleDateChange = (selectedDate: Date) => {
-    if (selectedDate) {
-      if (pickerMode === 'start') {
-        setStartDate(selectedDate);
-      } else {
-        setEndDate(selectedDate);
-      }
-    }
-  };
-
-  const openPicker = (mode: 'start' | 'end') => {
-    setPickerMode(mode);
+  const openDatePicker = (target: 'start_date' | 'end_date' | 'gate_date') => {
+    let title = 'Select Start Date';
+    if (target === 'end_date') title = 'Select End Date';
+    if (target === 'gate_date') title = 'Select Date';
+    setPickerConfig({
+      mode: 'date',
+      title,
+      target,
+    });
     setShowPicker(true);
   };
 
+  const openTimePicker = (target: 'start_time' | 'end_time') => {
+    setPickerConfig({
+      mode: 'time',
+      title: target === 'start_time' ? 'Select Start Time' : 'Select End Time',
+      target,
+    });
+    setShowPicker(true);
+  };
+
+  const handlePickerSave = (selected: Date) => {
+    if (pickerConfig.target === 'start_date') {
+      setStartDate(selected);
+      setGatePassDate(selected);
+    } else if (pickerConfig.target === 'end_date') {
+      setEndDate(selected);
+    } else if (pickerConfig.target === 'gate_date') {
+      setGatePassDate(selected);
+      setStartDate(selected);
+      setEndDate(selected);
+    } else if (pickerConfig.target === 'start_time') {
+      setStartTimeDate(selected);
+    } else if (pickerConfig.target === 'end_time') {
+      setEndTimeDate(selected);
+    }
+    setShowPicker(false);
+  };
+
+  const getInitialPickerDate = () => {
+    switch (pickerConfig.target) {
+      case 'start_date': return startDate;
+      case 'end_date': return endDate;
+      case 'gate_date': return gatePassDate;
+      case 'start_time': return startTimeDate;
+      case 'end_time': return endTimeDate;
+      default: return new Date();
+    }
+  };
+
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
+  const formatTime = (dateObj: Date) => {
+    const hours = dateObj.getHours();
+    const minutes = dateObj.getMinutes();
+    const isPM = hours >= 12;
+    const displayHour = hours % 12 || 12;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(displayHour)}:${pad(minutes)} ${isPM ? 'PM' : 'AM'}`;
   };
 
   const handleSubmit = () => {
-    if (!type || !reason) {
+    if (!type || !reason.trim()) {
       showAlert('Validation Error', 'Please select a leave type and provide a reason.', 'error');
       return;
     }
-    const payload: any = {
-      type: type.name,
-      from: formatDate(startDate),
-      to: formatDate(endDate),
-      reason,
-      half_day: isHalfDay,
-    };
-    if (isHalfDay) {
-      payload.from_session_id = 1;
-      payload.to_session_id = 1;
+
+    if (isGatePass) {
+      const startMinutes = startTimeDate.getHours() * 60 + startTimeDate.getMinutes();
+      const endMinutes = endTimeDate.getHours() * 60 + endTimeDate.getMinutes();
+      if (endMinutes <= startMinutes) {
+        showAlert('Validation Error', 'End Time must be after Start Time.', 'error');
+        return;
+      }
+
+      const payload = {
+        type: type?.id !== undefined ? type.id : 1,
+        date: formatDate(gatePassDate),
+        start_time: formatTime(startTimeDate),
+        end_time: formatTime(endTimeDate),
+        reason: reason.trim(),
+      };
+      dispatch(applyLeave(payload));
+    } else {
+      if (endDate < startDate) {
+        showAlert('Validation Error', 'End Date cannot be earlier than Start Date.', 'error');
+        return;
+      }
+
+      const payload: any = {
+        type: type.name,
+        from: formatDate(startDate),
+        to: formatDate(endDate),
+        reason: reason.trim(),
+        half_day: isHalfDay,
+      };
+      if (isHalfDay) {
+        payload.from_session_id = 1;
+        payload.to_session_id = 1;
+      }
+      dispatch(applyLeave(payload));
     }
-    dispatch(applyLeave(payload));
   };
 
   return (
@@ -169,7 +264,15 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
                     activeOpacity={0.8}
                   >
                     <Icon
-                      name={item.name.includes('Sick') ? 'medical-bag' : item.name.includes('Paid') ? 'currency-usd' : 'calendar-text-outline'}
+                      name={
+                        item.name.includes('Sick')
+                          ? 'medical-bag'
+                          : item.name.includes('Paid')
+                            ? 'currency-usd'
+                            : item.name.toLowerCase().includes('gate')
+                              ? 'door-open'
+                              : 'calendar-text-outline'
+                      }
                       size={16}
                       color={isActive ? '#FFFFFF' : colors.textSecondary}
                       style={{ marginRight: 6 }}
@@ -180,41 +283,81 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
               })}
             </View>
 
-            <View style={styles.dateRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <InputField
-                  label="Start Date"
-                  placeholder="YYYY-MM-DD"
-                  value={formatDate(startDate)}
-                  onChangeText={() => { }}
-                  leftIcon="calendar-start"
-                  onPress={() => openPicker('start')}
-                />
-              </View>
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <InputField
-                  label="End Date"
-                  placeholder="YYYY-MM-DD"
-                  value={formatDate(endDate)}
-                  onChangeText={() => { }}
-                  leftIcon="calendar-end"
-                  onPress={() => openPicker('end')}
-                />
-              </View>
-            </View>
+            {isGatePass ? (
+              <>
+                <View style={{ marginBottom: 16 }}>
+                  <InputField
+                    label="Date"
+                    placeholder="YYYY-MM-DD"
+                    value={formatDate(gatePassDate)}
+                    onChangeText={() => { }}
+                    leftIcon="calendar"
+                    onPress={() => openDatePicker('gate_date')}
+                  />
+                </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}>Request Half Day</Text>
-              <Switch
-                value={isHalfDay}
-                onValueChange={setIsHalfDay}
-                trackColor={{ false: '#e0e0e0', true: colors.primary + '80' }}
-                thumbColor={isHalfDay ? colors.primary : '#f4f3f4'}
-              />
-            </View>
+                <View style={[styles.dateRow, { marginBottom: 16 }]}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <InputField
+                      label="Start Time"
+                      placeholder="HH:MM AM/PM"
+                      value={formatTime(startTimeDate)}
+                      onChangeText={() => { }}
+                      leftIcon="clock-outline"
+                      onPress={() => openTimePicker('start_time')}
+                    />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <InputField
+                      label="End Time"
+                      placeholder="HH:MM AM/PM"
+                      value={formatTime(endTimeDate)}
+                      onChangeText={() => { }}
+                      leftIcon="clock-outline"
+                      onPress={() => openTimePicker('end_time')}
+                    />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.dateRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <InputField
+                      label="Start Date"
+                      placeholder="YYYY-MM-DD"
+                      value={formatDate(startDate)}
+                      onChangeText={() => { }}
+                      leftIcon="calendar-start"
+                      onPress={() => openDatePicker('start_date')}
+                    />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <InputField
+                      label="End Date"
+                      placeholder="YYYY-MM-DD"
+                      value={formatDate(endDate)}
+                      onChangeText={() => { }}
+                      leftIcon="calendar-end"
+                      onPress={() => openDatePicker('end_date')}
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}>Request Half Day</Text>
+                  <Switch
+                    value={isHalfDay}
+                    onValueChange={setIsHalfDay}
+                    trackColor={{ false: '#e0e0e0', true: colors.primary + '80' }}
+                    thumbColor={isHalfDay ? colors.primary : '#f4f3f4'}
+                  />
+                </View>
+              </>
+            )}
 
             <InputField
-              label="Reason for leave"
+              label={isGatePass ? "Reason for gate pass" : "Reason for leave"}
               placeholder="Please briefly explain your reason..."
               value={reason}
               onChangeText={setReason}
@@ -231,13 +374,10 @@ export const ApplyLeaveScreen = ({ navigation }: any) => {
 
             <GlassDateTimePickerModal
               visible={showPicker}
-              mode="date"
-              title={pickerMode === 'start' ? "Select Start Date" : "Select End Date"}
-              initialDate={pickerMode === 'start' ? startDate : endDate}
-              onSave={(selectedDate) => {
-                handleDateChange(selectedDate);
-                setShowPicker(false);
-              }}
+              mode={pickerConfig.mode}
+              title={pickerConfig.title}
+              initialDate={getInitialPickerDate()}
+              onSave={handlePickerSave}
               onClose={() => setShowPicker(false)}
             />
           </View>

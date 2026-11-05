@@ -39,8 +39,34 @@ export const DashboardScreen = ({ navigation }: any) => {
   const { liveKmData, kmSummaryData, routeData } = useSelector((state: RootState) => state.tracking);
   const { user, isManager } = useSelector((state: RootState) => state.auth);
   const [exitModalVisible, setExitModalVisible] = React.useState(false);
+  const [alertModalConfig, setAlertModalConfig] = React.useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+  });
   const [deviceModalVisible, setDeviceModalVisible] = React.useState(false);
   const [deviceBrand, setDeviceBrand] = React.useState('');
+
+  const allowMobileAttendance =
+    dashboardData?.allow_mobile_attendance ??
+    dashboardData?.employee?.allow_mobile_attendance ??
+    statusData?.allow_mobile_attendance ??
+    user?.employee?.allow_mobile_attendance ??
+    true;
+
+  const canPunchIn =
+    dashboardData?.can_punch_in ??
+    statusData?.can_punch_in ??
+    true;
+
+  const canPunchOut =
+    dashboardData?.can_punch_out ??
+    statusData?.can_punch_out ??
+    true;
 
   const sessions = routeData?.attendance_sessions || [];
   const ongoingSession = sessions.find((s: any) => !s.attendance?.check_out) || sessions[sessions.length - 1];
@@ -48,6 +74,8 @@ export const DashboardScreen = ({ navigation }: any) => {
 
   const isCheckedIn = dashboardData?.attendance_state === 'checked_in' ||
     dashboardData?.can_punch_out ||
+    statusData?.state === 'checked_in' ||
+    statusData?.can_punch_out ||
     (statusData?.has_punched_in_today && !statusData?.has_punched_out_today) ||
     isTrackingActive;
 
@@ -214,36 +242,78 @@ export const DashboardScreen = ({ navigation }: any) => {
 
           <View style={styles.punchHeader}>
             <Text style={styles.punchDate}>Today, {dashboardData?.date || ''}</Text>
-            <View style={styles.badgeContainer}>
-              <Icon name="clock-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.badgeText}>{isCheckedIn ? 'Working' : 'Pending'}</Text>
+            <View style={[styles.badgeContainer, !allowMobileAttendance ? { backgroundColor: '#EF4444' } : undefined]}>
+              <Icon
+                name={!allowMobileAttendance ? 'lock-outline' : 'clock-outline'}
+                size={14}
+                color="#FFFFFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.badgeText}>
+                {!allowMobileAttendance ? 'Mobile Punch Restricted' : (isCheckedIn ? 'Working' : 'Pending')}
+              </Text>
             </View>
           </View>
 
           <Text style={styles.punchStatus}>
-            {isCheckedIn ? 'Currently Punched In' : 'Ready for work?'}
+            {!allowMobileAttendance
+              ? 'Mobile Punch Restricted'
+              : (isCheckedIn ? 'Currently Punched In' : 'Ready for work?')}
           </Text>
           <Text style={styles.punchSubStatus}>
-            {isCheckedIn
-              ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.`
-              : "You haven't punched in yet today."}
+            {!allowMobileAttendance
+              ? 'Your attendance rule is Biometric, Manual. Punching from the mobile app is disabled.'
+              : (isCheckedIn
+                ? `You have worked ${getSafeHours(dashboardData?.hours_today).toFixed(1)} hours today.`
+                : "You haven't punched in yet today.")}
           </Text>
 
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity
-              style={styles.punchBtn}
+              style={[styles.punchBtn, !allowMobileAttendance && { opacity: 0.85 }]}
               activeOpacity={0.9}
               onPress={() => {
+                if (!allowMobileAttendance) {
+                  setAlertModalConfig({
+                    visible: true,
+                    title: 'Mobile Punch Not Allowed',
+                    message: 'You are not allowed to punch in or out from the Mobile App because your attendance rule is Biometric, Manual.',
+                  });
+                  return;
+                }
                 if (isCheckedIn) {
+                  if (!canPunchOut) {
+                    setAlertModalConfig({
+                      visible: true,
+                      title: 'Cannot Punch Out',
+                      message: 'Punch out is currently not allowed for your attendance status.',
+                    });
+                    return;
+                  }
                   navigation.navigate('LiveTrackingScreen');
                 } else {
+                  if (!canPunchIn) {
+                    setAlertModalConfig({
+                      visible: true,
+                      title: 'Cannot Punch In',
+                      message: 'Punch in is currently not allowed for your attendance status.',
+                    });
+                    return;
+                  }
                   navigation.navigate('PunchInScreen');
                 }
               }}
             >
-              <Icon name="fingerprint" size={20} color={colors.punchBtnText} style={styles.punchBtnIcon} />
+              <Icon
+                name={!allowMobileAttendance ? 'lock-outline' : 'fingerprint'}
+                size={20}
+                color={colors.punchBtnText}
+                style={styles.punchBtnIcon}
+              />
               <Text style={styles.punchBtnText}>
-                {isCheckedIn ? 'Punch out now' : 'Punch in now'}
+                {!allowMobileAttendance
+                  ? 'Mobile punch disabled'
+                  : (isCheckedIn ? 'Punch out now' : 'Punch in now')}
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -389,6 +459,15 @@ export const DashboardScreen = ({ navigation }: any) => {
         onPrimaryPress={() => BackHandler.exitApp()}
         secondaryButtonText="Cancel"
         onSecondaryPress={() => setExitModalVisible(false)}
+      />
+
+      <CustomAlertModal
+        visible={alertModalConfig.visible}
+        title={alertModalConfig.title}
+        message={alertModalConfig.message}
+        type="warning"
+        primaryButtonText="OK"
+        onPrimaryPress={() => setAlertModalConfig(prev => ({ ...prev, visible: false }))}
       />
 
       <DeviceSettingsModal

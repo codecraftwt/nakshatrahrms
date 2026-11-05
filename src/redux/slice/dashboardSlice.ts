@@ -18,6 +18,9 @@ export const fetchDashboardSummary = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await api.get('/dashboard/summary');
+      if (response.data?.status === false) {
+        return rejectWithValue(response.data?.message || 'Failed to fetch dashboard summary');
+      }
       return response.data;
     } catch (error: any) {
       console.log('Dashboard Error:', error?.response?.data || error.message);

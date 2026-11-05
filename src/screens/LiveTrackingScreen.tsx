@@ -38,6 +38,18 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   const mapRef = React.useRef<any>(null);
   const [loading, setLoading] = React.useState(false);
 
+  const allowMobileAttendance =
+    dashboardData?.allow_mobile_attendance ??
+    dashboardData?.employee?.allow_mobile_attendance ??
+    statusData?.allow_mobile_attendance ??
+    user?.employee?.allow_mobile_attendance ??
+    true;
+
+  const canPunchOut =
+    dashboardData?.can_punch_out ??
+    statusData?.can_punch_out ??
+    true;
+
   React.useEffect(() => {
     dispatch(fetchGeoFencing());
     dispatch(fetchLiveKm());
@@ -198,6 +210,22 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
   }, []);
 
   const handlePunchOut = async () => {
+    if (!allowMobileAttendance) {
+      showAlert(
+        'Mobile Attendance Restricted',
+        'You are not allowed to punch out from the Mobile App because your attendance rule is Biometric, Manual.'
+      );
+      return;
+    }
+
+    if (!canPunchOut) {
+      showAlert(
+        'Cannot Punch Out',
+        'Punch out is currently not allowed for your attendance status.'
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       let base64Selfie = selfieBase64;
@@ -326,15 +354,20 @@ export const LiveTrackingScreen = ({ navigation }: any) => {
           out_remarks: outRemarks,
         };
 
-        await dispatch(postPunchOut(payload)).unwrap();
-        await LocationService.stopTracking();
-
-        showAlert('Success', 'Punched out successfully!', 'success', () => navigation.navigate('MainTabs'));
+        try {
+          await dispatch(postPunchOut(payload)).unwrap();
+          await LocationService.stopTracking();
+          showAlert('Success', 'Punched out successfully!', 'success', () => navigation.navigate('MainTabs'));
+        } catch (punchErr: any) {
+          const errMsg = typeof punchErr === 'string' ? punchErr : (punchErr?.message || 'Failed to punch out');
+          showAlert('Punch Out Failed', errMsg);
+        }
       } catch (err: any) {
         if (err.message && err.message.includes('Location timeout')) {
           showAlert('Location Error', 'Failed to get an accurate GPS lock. Please try again outside.');
         } else {
-          showAlert('Error', 'Failed to punch out. Please try again.');
+          const errMsg = typeof err === 'string' ? err : (err?.message || 'Failed to punch out. Please try again.');
+          showAlert('Error', errMsg);
           console.error('Punch out error:', err);
         }
       } finally {
