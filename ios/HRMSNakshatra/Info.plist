@@ -37,7 +37,7 @@
 
 	<!-- Camera Permission -->
 	<key>NSCameraUsageDescription</key>
-	<string>This app requires access to the camera to capture photos.</string>
+	<string>This app uses your camera to capture a photo during punch-in and punch-out for attendance verification, which is stored with your attendance record.</string>
 
     <key>NSPhotoLibraryUsageDescription</key>
     <string>This app requires access to your photo library to select photos.</string>
